@@ -4,8 +4,8 @@ import test from "node:test";
 
 test("PostgreSQL pool is a conservative global singleton", async () => {
   process.env.POSTGRES_URL = "postgresql://demo:demo@localhost:5432/demo";
-  const first = await import("../../src/lib/db/postgres.ts");
-  const second = await import("../../src/lib/db/postgres.ts");
+  const first = await import("../../src/lib/db/postgres");
+  const second = await import("../../src/lib/db/postgres");
 
   assert.strictEqual(first.pool, second.pool);
   assert.equal(first.pool.options.max, 5);
