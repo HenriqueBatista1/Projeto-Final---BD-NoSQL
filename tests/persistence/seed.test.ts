@@ -38,3 +38,30 @@ test("seed rejects non-array API responses before database writes", async () => 
     /Invalid FakeStoreAPI users response/,
   );
 });
+
+test("seed rejects malformed product and user values before database writes", async () => {
+  const seed = await import("../../scripts/seed");
+
+  assert.throws(
+    () =>
+      seed.validateSeedArray("products", [{
+        id: 0,
+        title: "",
+        price: -1,
+        description: "description",
+        category: "category",
+        image: "image",
+        rating: { rate: 5.1, count: -1 },
+      }]),
+    /Invalid FakeStoreAPI products response/,
+  );
+  assert.throws(
+    () =>
+      seed.validateSeedArray("users", [{
+        name: { firstname: "", lastname: "User" },
+        email: "",
+        address: { street: "", number: 1, city: "Recife", zipcode: "50000" },
+      }]),
+    /Invalid FakeStoreAPI users response/,
+  );
+});

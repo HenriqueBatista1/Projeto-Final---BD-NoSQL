@@ -32,12 +32,19 @@ export function formatAddress(address: unknown): string {
     throw new Error("Invalid FakeStoreAPI address");
   }
   const value = address as Record<string, unknown>;
-  return [value.street, value.number, value.city, value.zipcode]
-    .every((part) => part !== undefined && part !== null && String(part).length > 0)
-    ? `${value.street}, ${value.number}, ${value.city}, ${value.zipcode}`
-    : (() => {
-        throw new Error("Invalid FakeStoreAPI address");
-      })();
+  if (
+    typeof value.street !== "string" ||
+    value.street.trim().length === 0 ||
+    (typeof value.number !== "number" && typeof value.number !== "string") ||
+    String(value.number).trim().length === 0 ||
+    typeof value.city !== "string" ||
+    value.city.trim().length === 0 ||
+    typeof value.zipcode !== "string" ||
+    value.zipcode.trim().length === 0
+  ) {
+    throw new Error("Invalid FakeStoreAPI address");
+  }
+  return `${value.street.trim()}, ${String(value.number).trim()}, ${value.city.trim()}, ${value.zipcode.trim()}`;
 }
 
 export function validateSeedArray(kind: "products" | "users", value: unknown): unknown[] {
@@ -47,36 +54,62 @@ export function validateSeedArray(kind: "products" | "users", value: unknown): u
 
   if (kind === "products") {
     for (const product of value) {
+      const candidate = product as Record<string, unknown>;
+      const rating =
+        candidate.rating && typeof candidate.rating === "object"
+          ? candidate.rating as Record<string, unknown>
+          : undefined;
       if (
         !product ||
         typeof product !== "object" ||
-        typeof product.id !== "number" ||
-        typeof product.title !== "string" ||
-        typeof product.price !== "number" ||
-        typeof product.description !== "string" ||
-        typeof product.category !== "string" ||
-        typeof product.image !== "string" ||
-        !product.rating ||
-        typeof product.rating.rate !== "number" ||
-        typeof product.rating.count !== "number"
+        typeof candidate.id !== "number" ||
+        !Number.isInteger(candidate.id) ||
+        candidate.id <= 0 ||
+        typeof candidate.title !== "string" ||
+        candidate.title.trim().length === 0 ||
+        typeof candidate.price !== "number" ||
+        !Number.isFinite(candidate.price) ||
+        candidate.price < 0 ||
+        typeof candidate.description !== "string" ||
+        candidate.description.trim().length === 0 ||
+        typeof candidate.category !== "string" ||
+        candidate.category.trim().length === 0 ||
+        typeof candidate.image !== "string" ||
+        candidate.image.trim().length === 0 ||
+        !rating ||
+        typeof rating.rate !== "number" ||
+        !Number.isFinite(rating.rate) ||
+        rating.rate < 0 ||
+        rating.rate > 5 ||
+        typeof rating.count !== "number" ||
+        !Number.isInteger(rating.count) ||
+        rating.count < 0
       ) {
         throw new Error("Invalid FakeStoreAPI products response");
       }
     }
   } else {
     for (const user of value) {
+      const candidate = user as Record<string, unknown>;
+      const name =
+        candidate.name && typeof candidate.name === "object"
+          ? candidate.name as Record<string, unknown>
+          : undefined;
       if (
         !user ||
         typeof user !== "object" ||
-        !user.name ||
-        typeof user.name.firstname !== "string" ||
-        typeof user.name.lastname !== "string" ||
-        typeof user.email !== "string" ||
-        !user.address
+        !name ||
+        typeof name.firstname !== "string" ||
+        name.firstname.trim().length === 0 ||
+        typeof name.lastname !== "string" ||
+        name.lastname.trim().length === 0 ||
+        typeof candidate.email !== "string" ||
+        candidate.email.trim().length === 0 ||
+        !candidate.address
       ) {
         throw new Error("Invalid FakeStoreAPI users response");
       }
-      formatAddress(user.address);
+      formatAddress(candidate.address);
     }
   }
 
