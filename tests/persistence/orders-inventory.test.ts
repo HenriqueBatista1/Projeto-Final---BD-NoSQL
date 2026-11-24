@@ -75,6 +75,32 @@ test("placeOrder rejects empty and duplicate items before connecting", async () 
   assert.equal(connections, 0);
 });
 
+test("placeOrder rejects null and non-object items before connecting", async () => {
+  let connections = 0;
+  const database = {
+    async connect() {
+      connections += 1;
+      throw new Error("should not connect");
+    },
+  } as unknown as Pool;
+  const repository = new OrderAndInventoryRepository(database);
+  const baseInput = {
+    userId: 1,
+    deliveryAddress: "Rua A",
+    paymentMethod: "PIX",
+  };
+
+  for (const item of [null, undefined, "product", 42]) {
+    await assert.rejects(
+      repository.placeOrder({ ...baseInput, items: [item] as never }),
+      (error: unknown) =>
+        error instanceof InvalidOrderError &&
+        error.message === "Order contains an invalid item",
+    );
+  }
+  assert.equal(connections, 0);
+});
+
 test("placeOrder locks in product order and persists server snapshots", async () => {
   const calls: QueryCall[] = [];
   let released = false;

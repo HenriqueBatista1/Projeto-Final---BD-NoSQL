@@ -54,14 +54,15 @@ export function validateSeedArray(kind: "products" | "users", value: unknown): u
 
   if (kind === "products") {
     for (const product of value) {
+      if (!product || typeof product !== "object") {
+        throw new Error("Invalid FakeStoreAPI products response");
+      }
       const candidate = product as Record<string, unknown>;
       const rating =
         candidate.rating && typeof candidate.rating === "object"
           ? candidate.rating as Record<string, unknown>
           : undefined;
       if (
-        !product ||
-        typeof product !== "object" ||
         typeof candidate.id !== "number" ||
         !Number.isInteger(candidate.id) ||
         candidate.id <= 0 ||
@@ -90,14 +91,15 @@ export function validateSeedArray(kind: "products" | "users", value: unknown): u
     }
   } else {
     for (const user of value) {
+      if (!user || typeof user !== "object") {
+        throw new Error("Invalid FakeStoreAPI users response");
+      }
       const candidate = user as Record<string, unknown>;
       const name =
         candidate.name && typeof candidate.name === "object"
           ? candidate.name as Record<string, unknown>
           : undefined;
       if (
-        !user ||
-        typeof user !== "object" ||
         !name ||
         typeof name.firstname !== "string" ||
         name.firstname.trim().length === 0 ||
@@ -109,7 +111,11 @@ export function validateSeedArray(kind: "products" | "users", value: unknown): u
       ) {
         throw new Error("Invalid FakeStoreAPI users response");
       }
-      formatAddress(candidate.address);
+      try {
+        formatAddress(candidate.address);
+      } catch {
+        throw new Error("Invalid FakeStoreAPI users response");
+      }
     }
   }
 

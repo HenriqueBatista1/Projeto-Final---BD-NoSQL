@@ -39,6 +39,35 @@ test("seed rejects non-array API responses before database writes", async () => 
   );
 });
 
+test("seed rejects null and non-object entries with a domain error", async () => {
+  const seed = await import("../../scripts/seed");
+
+  for (const entry of [null, undefined, "product", 42, () => undefined]) {
+    assert.throws(
+      () => seed.validateSeedArray("products", [entry]),
+      /Invalid FakeStoreAPI products response/,
+    );
+    assert.throws(
+      () => seed.validateSeedArray("users", [entry]),
+      /Invalid FakeStoreAPI users response/,
+    );
+  }
+});
+
+test("seed reports a users-response error for malformed addresses", async () => {
+  const seed = await import("../../scripts/seed");
+
+  assert.throws(
+    () =>
+      seed.validateSeedArray("users", [{
+        name: { firstname: "A", lastname: "B" },
+        email: "user@example.com",
+        address: [],
+      }]),
+    /Invalid FakeStoreAPI users response/,
+  );
+});
+
 test("seed rejects malformed product and user values before database writes", async () => {
   const seed = await import("../../scripts/seed");
 

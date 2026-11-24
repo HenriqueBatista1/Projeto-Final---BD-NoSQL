@@ -58,6 +58,9 @@ function validateOrderItems(items: PlacedOrderItem[]): void {
 
   const externalIds = new Set<number>();
   for (const item of items) {
+    if (!item || typeof item !== "object") {
+      throw new InvalidOrderError("Order contains an invalid item");
+    }
     if (externalIds.has(item.externalId)) {
       throw new InvalidOrderError(
         `Order contains duplicate product ${item.externalId}`,
