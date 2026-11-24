@@ -4,4 +4,7 @@
 node_modules/
 .next/
 !.env.example
+
+# skills
 .opencode
+.codex
