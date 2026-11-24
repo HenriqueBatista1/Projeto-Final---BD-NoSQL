@@ -1,12 +1,12 @@
 # Especificação Arquitetural — E-Commerce com Persistência Poliglota
 
-> **Objetivo:** Documento de referência técnica para implementação da aplicação de E-Commerce utilizando **Next.js 15 (App Router)** com persistência poliglota distribuída entre **PostgreSQL**, **MongoDB** e **Redis**, alimentada via seed pela **FakeStoreAPI**.
+> **Objetivo:** Documento de referência técnica para implementação da aplicação de E-Commerce utilizando **Next.js 16 (App Router)** com persistência poliglota distribuída entre **PostgreSQL**, **MongoDB** e **Redis**, alimentada via seed pela **FakeStoreAPI**.
 
 ## 1. Visão Geral da Arquitetura e Stack
 
 ### 1.1. Stack Tecnológica
 
-* **Framework Full-Stack:** Next.js 15 (App Router, Server Actions / Route Handlers, React, Tailwind CSS).
+* **Framework Full-Stack:** Next.js 16 (App Router, Server Actions / Route Handlers, React, Tailwind CSS).
 
 * **Drivers de Banco de Dados (Nativos — Sem ORM/ODM):**
 
@@ -316,6 +316,8 @@ Como os metadados ficam no MongoDB e o saldo em tempo real fica no PostgreSQL:
    * Ordena os itens do carrinho por `external_product_id` em **ordem crescente (`a.id - b.id`)** antes de iniciar os locks no banco para prevenir *deadlocks* entre transações concorrentes.
 
 2. **Início da Transação PostgreSQL:**
+
+   * O repositório rejeita listas vazias e `external_product_id` duplicados com `InvalidOrderError` antes de obter uma conexão.
 
    * Obtém um cliente dedicado do pool (`const client = await pool.connect()`) e executa `BEGIN`.
 

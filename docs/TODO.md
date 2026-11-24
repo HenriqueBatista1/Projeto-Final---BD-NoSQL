@@ -81,29 +81,29 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 
 ## Épico A — Fundação da aplicação
 
-### [ ] A1. Bootstrap do Next.js 15 (App Router + Tailwind) — *pode começar agora*
+### [X] A1. Bootstrap do Next.js 16 (App Router + Tailwind) — *concluído*
 
 - **Arquivos:** `package.json`, `tsconfig.json`, `next.config.ts`, `postcss.config.mjs`, `app/layout.tsx`, `app/globals.css`, `app/page.tsx`.
-- Adicionar de uma vez (dono exclusivo do `package.json`): `next@15`, `react`, `react-dom`, `tailwindcss`, `@tailwindcss/postcss`, `postcss`, `clsx`, `zod`, `@types/react`, `@types/react-dom`, `@playwright/test`. Nenhum outro pacote mexe nesse arquivo.
-- Ajustar scripts: `dev`, `build`, `start`, `test:e2e` e ampliar `test` para `tsx --test tests/persistence/*.test.ts tests/services/*.test.ts`.
-- Ajustar `tsconfig.json`: `jsx: "preserve"`, plugin `next`, alias `@/* → ./src/*` (mantendo `strict`).
+- Adicionar de uma vez (dono exclusivo do `package.json`): `next@16`, `react`, `react-dom`, `tailwindcss`, `@tailwindcss/postcss`, `postcss`, `clsx`, `zod`, `@types/react`, `@types/react-dom`, `@playwright/test`. Nenhum outro pacote mexe nesse arquivo.
+- Ajustar scripts: `dev`, `build`, `start`, `test:e2e` e ampliar `test` para `tsx --test tests/**/*.test.ts`.
+- Ajustar `tsconfig.json`: `jsx: "react-jsx"`, plugin `next`, alias `@/* → ./src/*` (mantendo `strict`).
 - `app/page.tsx` pode ser um placeholder temporário; `app/layout.tsx` importa `globals.css` e define `<html lang="pt-BR">`.
 - **Critérios:** `npm ci && npm run typecheck && npm test && npm run build` passam; `npm run dev` sobe sem erro.
 
-### [ ] A2. Tipos e contratos de domínio — *pode começar agora*
+### [X] A2. Tipos e contratos de domínio — *concluído*
 
 - **Arquivos:** `src/lib/types.ts`, `tests/persistence/types.test.ts`.
 - Transcrever os tipos da seção de contratos e exportar também as interfaces dos repositórios em `src/lib/repositories/contracts.ts`.
 - **Critérios:** typecheck passa; teste de compile-time ou de shape garante os campos de `Product`, `CartItem`, `Order`.
 
-### [ ] A3. Ambiente, secrets e documentação de setup — *pode começar agora*
+### [X] A3. Ambiente, secrets e documentação de setup — *concluído*
 
 - **Arquivos:** `.env.example`, `tests/persistence/environment.test.ts`, `docs/ENVIRONMENT.md`.
 - Documentar as 3 URLs (Supabase 5432, Atlas SRV, Upstash `rediss://`), a senha demo `123456` com salt fixo `polyglot-store-demo` (uso exclusivo de demonstração), o comando de `psql -f init.sql` e o `npm run seed`.
 - Atualizar o teste de texto exato de `.env.example` junto com o arquivo (eles são acoplados).
 - **Critérios:** `npm test` passa; nenhuma credencial real aparece em arquivos versionados.
 
-### [ ] A4. CI de verificação — *pode começar agora*
+### [X] A4. CI de verificação — *concluído*
 
 - **Arquivos:** `.github/workflows/ci.yml`.
 - Instalar com `npm ci`, rodar `npm run typecheck` e `npm test` em Node 20 (`.nvmrc`), sem depender de bancos externos.
@@ -113,24 +113,25 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 
 ## Épico B — Repositórios (camada de persistência)
 
-### [ ] B1. `CatalogRepository` — MongoDB — *pode começar agora*
+### [X] B1. `CatalogRepository` — MongoDB — *concluído*
 
 - **Arquivos:** `src/lib/repositories/catalog.ts`, `tests/persistence/catalog.test.ts`.
 - Implementar os 5 métodos do contrato. Mapeamento `id → externalId`, mantendo **exatamente** os campos reais da FakeStoreAPI (nada de `attributes` inventados).
 - `suggest`: guard clause para `trim().length < 2`, escape de metacaracteres regex, projeção leve, `limit(5)`, `$options: "i"`.
 - **Critérios:** testes com fake de collection cobrem filtro por categoria, sanitização da busca, projeção e limite; typecheck passa.
 
-### [ ] B2. `CartAndSessionRepository` — Redis — *pode começar agora*
+### [X] B2. `CartAndSessionRepository` — Redis — *concluído*
 
 - **Arquivos:** `src/lib/repositories/cart-session.ts`, `tests/persistence/cart-session.test.ts`.
 - Carrinho como Hash (`HINCRBY`, `HDEL`, `HGETALL`, `DEL`) com `EXPIRE 86400` renovado a cada escrita. Sessão como String JSON com `SET ... EX 7200`, token via `crypto.randomUUID()`.
 - `getCart` converte chaves/valores para `Record<number, number>` descartando entradas inválidas.
 - **Critérios:** testes com fake de Redis provam TTL, incremento/decremento, remoção, expiração de sessão e que `clearCart` não toca em `session:*`.
 
-### [ ] B3. `OrderAndInventoryRepository` — PostgreSQL — *pode começar agora*
+### [X] B3. `OrderAndInventoryRepository` — PostgreSQL — *concluído*
 
 - **Arquivos:** `src/lib/repositories/orders-inventory.ts`, `tests/persistence/orders-inventory.test.ts`.
 - `stocksFor`: uma única query `ANY($1::int[])` devolvendo `Map` (zero N+1).
+- `placeOrder` rejeita pedidos vazios e IDs de produto duplicados com `InvalidOrderError` antes de abrir uma conexão.
 - `placeOrder`: `pool.connect()` → `BEGIN` → lock `SELECT quantity ... FOR UPDATE` em **ordem crescente de `externalId`** → validar saldo → `UPDATE` (trigger grava auditoria) → `INSERT orders` → `INSERT order_items` com snapshot de título/preço → `COMMIT`; qualquer falha faz `ROLLBACK` e `release()`. Nunca confiar em preço recebido.
 - `history`: join `orders`/`order_items`, ordenado por `created_at DESC, oi.id ASC`, agrupado em `Order[]` na camada de serviço (pode agrupar aqui se preferir — manter um único dono da lógica).
 - **Critérios:** testes com fake de client/query cobrem rollback sem debitar estoque, ordem dos locks, snapshot e agrupamento do histórico.
