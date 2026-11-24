@@ -13,11 +13,11 @@
 
 ## Já pronto (não refazer)
 
-- [x] Clientes singleton em `globalThis` para PostgreSQL (`max: 5`), MongoDB e Redis (`lazyConnect`).
-- [x] Schema PostgreSQL `init.sql` com 5 tabelas, 3 índices e trigger auditório de estoque.
-- [x] Seed idempotente (`scripts/seed.ts`) via FakeStoreAPI, com validação de payload e estoque determinístico.
-- [x] Suíte de persistência em `tests/persistence/` (singletons, validação, schema, env).
-- [x] `docs/ARCHITECTURE.md` com o desenho completo da aplicação.
+- [X] Clientes singleton em `globalThis` para PostgreSQL (`max: 5`), MongoDB e Redis (`lazyConnect`).
+- [X] Schema PostgreSQL `init.sql` com 5 tabelas, 3 índices e trigger auditório de estoque.
+- [X] Seed idempotente (`scripts/seed.ts`) via FakeStoreAPI, com validação de payload e estoque determinístico.
+- [X] Suíte de persistência em `tests/persistence/` (singletons, validação, schema, env).
+- [X] `docs/ARCHITECTURE.md` com o desenho completo da aplicação.
 
 ## Contratos compartilhados
 
@@ -277,3 +277,116 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 ## Fora de escopo
 
 - ORM/ODM, fila de pagamento real, webhook, recuperação de senha, cadastro de usuário, internacionalização e testes de carga em CI.
+
+---
+
+## DAG de dependências
+
+```mermaid
+flowchart TD
+    %% Raízes — podem começar em paralelo no dia 1
+    A1["A1 · Bootstrap Next.js"]
+    A2["A2 · Tipos e contratos"]
+    A3["A3 · Ambiente e docs"]
+    A4["A4 · CI"]
+    B1["B1 · CatalogRepository"]
+    B2["B2 · CartAndSessionRepository"]
+    B3["B3 · OrderAndInventoryRepository"]
+    DEC["DEC · Decisões em aberto"]
+
+    %% Contratos e acompanhamento (tracejado = não bloqueia o início)
+    A2 -.-> B1
+    A2 -.-> B2
+    A2 -.-> B3
+    A2 -.-> C6
+    C1 -.-> E1
+    C2 -.-> E1
+    C3 -.-> E1
+    C4 -.-> E1
+    C5 -.-> E1
+
+    %% Fundação
+    A1 --> D1
+    A1 --> F1
+    A1 --> F3
+    A2 --> F3
+    A3 --> F1
+    A3 --> F3
+    A4 --> F3
+
+    %% Repositórios -> Serviços
+    B1 --> C1
+    B3 --> C1
+    B1 --> C2
+    B2 --> C2
+    B3 --> C2
+    B2 --> C3
+    B3 --> C3
+    B2 --> C4
+    B3 --> C5
+    DEC --> C3
+
+    %% Serviços -> Actions -> Telas
+    C1 --> C6
+    C2 --> C6
+    C3 --> C6
+    C4 --> C6
+    C5 --> C6
+    C6 --> D2
+    C6 --> D3
+    C6 --> D4
+    C6 --> D5
+    C6 --> D6
+    D1 --> D2
+    D1 --> D3
+    D1 --> D4
+    D1 --> D6
+    D4 --> D5
+    DEC --> D5
+
+    %% Verificação
+    C3 --> E2
+    B3 --> E2
+    E1 --> E3
+    D2 --> E4
+    D3 --> E4
+    D4 --> E4
+    D5 --> E4
+    D6 --> E4
+    E2 --> F2
+    F1 --> F2
+
+    classDef fund fill:#e8f0ff,stroke:#3b6fc4,color:#12233d;
+    classDef repo fill:#e6f7ee,stroke:#2f8f5b,color:#123322;
+    classDef svc fill:#fff3e0,stroke:#c47f2f,color:#3d2a12;
+    classDef ui fill:#f3e8ff,stroke:#7b4fc4,color:#2d1b3d;
+    classDef qa fill:#ffe8ec,stroke:#c43b5b,color:#3d1220;
+    classDef ops fill:#eceff4,stroke:#5c6b7a,color:#1f2933;
+
+    class A1,A2,A3,A4 fund;
+    class B1,B2,B3 repo;
+    class C1,C2,C3,C4,C5,C6 svc;
+    class D1,D2,D3,D4,D5,D6 ui;
+    class E1,E2,E3,E4 qa;
+    class F1,F2,F3 ops;
+```
+
+**Legenda**
+
+- **Aresta sólida:** dependência real — o pacote de destino não deve ser considerado pronto antes do de origem.
+- **Aresta tracejada:** dependência de contrato ou acompanhamento. O trabalho **pode começar antes** do merge (use as assinaturas da seção [Contratos compartilhados](#contratos-compartilhados)); só a integração final espera.
+- **`DEC`** são as [decisões em aberto](#decisões-em-aberto-resolver-antes-dos-pacotes-c3d5): bloqueiam C3 e D5, nada mais.
+
+**Caminho crítico:** `B2/B3 → C3/C4 → C6 → D4 → D5 → E4`. É a cadeia mais longa; priorize esses pacotes na escalação. `A1 → D1` entra em paralelo e alimenta o mesmo caminho em D4.
+
+**Onda de execução** (linhas de uma mesma onda podem rodar em branches simultâneos):
+
+| Onda | Pacotes                         | Observação                                                                            |
+| ---- | ------------------------------- | --------------------------------------------------------------------------------------- |
+| 0    | A1, A2, A3, A4, B1, B2, B3, DEC | Todo mundo começa junto; A2 e DEC são contratos/decisões, não bloqueiam as raízes. |
+| 1    | C1, C2, C3, C4, C5, D1, F1      | D1 só espera A1; C* usa os contratos mesmo com B* em andamento.                        |
+| 2    | C6, E1, E2, F3                  | C6 é o gargalo de integração; E1 acompanha os serviços.                             |
+| 3    | D2, D3, D4, D6, E3              | Telas em paralelo, cada uma dona da sua pasta.                                          |
+| 4    | D5                              | Precisa de C3, C6 e do drawer D4.                                                       |
+| 5    | E4                              | Valida as jornadas completas.                                                           |
+| 6    | F2                              | Guia final, após concorrência e deploy estarem provados.                              |
