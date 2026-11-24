@@ -6,7 +6,9 @@ test("environment declares all persistence placeholders and gitignore protects s
   const envExample = await readFile(".env.example", "utf8");
   assert.equal(
     envExample,
-    'POSTGRES_URL=""\nMONGODB_URI=""\nREDIS_URL=""\n',
+    'POSTGRES_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres"\n' +
+      'MONGODB_URI="mongodb+srv://[USER]:[PASSWORD]@cluster0.[ID].mongodb.net/polyglot_store?retryWrites=true&w=majority"\n' +
+      'REDIS_URL="rediss://default:[PASSWORD]@[ENDPOINT].upstash.io:6379"\n',
   );
 
   const gitignore = await readFile(".gitignore", "utf8");
