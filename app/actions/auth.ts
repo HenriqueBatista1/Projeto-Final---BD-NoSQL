@@ -6,6 +6,7 @@ import { z } from "zod";
 import { AuthService, AuthenticationError } from "@/lib/services/auth";
 import { UserRepository } from "@/lib/repositories/users";
 import { CartAndSessionRepository } from "@/lib/repositories/cart-session";
+import type { Session } from "@/lib/types";
 
 const SESSION_COOKIE_NAME = "polyglot_session";
 const SESSION_MAX_AGE_SECONDS = 7200; // 2 horas (mesmo TTL do Redis)
@@ -97,4 +98,18 @@ export async function logoutAction(): Promise<void> {
   }
 
   redirect("/login");
+}
+
+//Retorna a sessão do usuário logado atualmente (ou null se não estiver logado).
+
+export async function getCurrentSession(): Promise<Session | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!token) {
+    return null;
+  }
+
+  const authService = getAuthService();
+  return authService.getSession(token);
 }

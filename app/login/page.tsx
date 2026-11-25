@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { Button, Card, Input } from "@/components/ui";
-import { loginAction, type LoginActionResult } from "../../actions/auth";
+import { loginAction, type LoginActionResult } from "../actions/auth";
 
 const initialState: LoginActionResult = {
   success: false,
