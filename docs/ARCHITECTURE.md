@@ -55,7 +55,9 @@ REDIS_URL="rediss://default:[PASSWORD]@[ENDPOINT].upstash.io:6379"
 
    * `CartAndSessionRepository` $\rightarrow$ **Redis** (Carrinho volátil via Hash nativo e Sessão de usuário).
 
-   * `OrderAndInventoryRepository` $\rightarrow$ **PostgreSQL** (Usuários, Controle de Estoque, Pedidos, Itens/Snapshot e Auditoria).
+   * `OrderAndInventoryRepository` $\rightarrow$ **PostgreSQL** (Controle de Estoque, Pedidos, Itens/Snapshot e Auditoria).
+
+   * `UserRepository` $\rightarrow$ **PostgreSQL** (consulta de usuários ativos para autenticação demonstrativa).
 
 4. **Camada 4 — Integração Externa (Seed Script):** Script idempotente executado na inicialização para popular MongoDB e PostgreSQL a partir da FakeStoreAPI, sem acoplamento em tempo real durante a navegação do usuário.
 
@@ -161,9 +163,9 @@ DEL cart:1
 
 #### Estrutura 2: Sessão do Usuário (`session:{token}`) & Transporte
 
-* **Transporte:** O `token` opaco (gerado via `crypto.randomUUID()`) é armazenado em um cookie **`HttpOnly`** (`SameSite=Lax`, `Path=/`, `Max-Age=7200`) gerenciado exclusivamente pelas *Server Actions* / *Route Handlers* do Next.js.
+* **Transporte:** O `token` opaco (gerado via `crypto.randomUUID()`) é armazenado em um cookie **`HttpOnly`** (`SameSite=Lax`, `Path=/`, `Max-Age=7200` e `Secure` em produção) gerenciado exclusivamente pelas *Server Actions* / *Route Handlers* do Next.js.
 
-* **Fluxo de Autenticação (Demo / Faculdade):** Suporta tanto login tradicional (`email` + verificação de hash de senha) quanto **seleção rápida de um usuário do seed** na tela de entrada para agilizar testes e demonstrações, criando a mesma sessão no Redis e o mesmo cookie `HttpOnly`.
+* **Fluxo de Autenticação (Demo / Faculdade):** Suporta tanto login tradicional (`email` + verificação de hash de senha) quanto **seleção rápida por ID de um usuário ativo do seed**. O `AuthService` consulta o `UserRepository`, cria a sessão no Redis e devolve o token; a camada C6 é a única responsável por escrever ou remover o cookie. Não há cadastro de usuários e nenhum hash de senha é exposto para a UI.
 
 * **Tipo Oficial no Redis:** `String` contendo payload JSON leve da sessão autenticada.
 
@@ -299,6 +301,8 @@ Como os metadados ficam no MongoDB e o saldo em tempo real fica no PostgreSQL:
 
 3. Busca detalhes (título, preço, imagem) no **MongoDB** usando `{ external_id: { $in: ids } }`.
 
+   Se algum ID do carrinho não existir mais no catálogo, a hidratação falha com erro de produto indisponível e mantém o Hash inalterado, evitando uma resposta parcial ou um carrinho fantasma.
+
 4. Busca saldo atual no **PostgreSQL** usando `WHERE external_product_id = ANY($1::int[])`.
 
 5. Retorna os itens hidratados indicando se algum item possui `cartQuantity > currentStock` para alerta visual imediato na UI.
@@ -312,6 +316,10 @@ Como os metadados ficam no MongoDB e o saldo em tempo real fica no PostgreSQL:
    * Lê `HGETALL cart:{userId}`. Se vazio, aborta.
 
    * Busca os preços oficiais no **MongoDB** (`{ external_id: { $in: ids } }`). **Nunca confiar em preços enviados pelo cliente.**
+
+   * Se algum produto não existir mais no catálogo, aborta todo o checkout e mantém o carrinho.
+
+   * Recebe um endereço de entrega livre e obrigatório, já validado pela camada de action, e aceita somente `PIX` ou `CARTAO_CREDITO` como forma de pagamento.
 
    * Ordena os itens do carrinho por `external_product_id` em **ordem crescente (`a.id - b.id`)** antes de iniciar os locks no banco para prevenir *deadlocks* entre transações concorrentes.
 
@@ -367,6 +375,10 @@ Como os metadados ficam no MongoDB e o saldo em tempo real fica no PostgreSQL:
    * Executa `COMMIT` no PostgreSQL.
 
    * Somente após o `COMMIT` ser confirmado sem erros, executa `` await redis.del(`cart:${userId}`) ``.
+
+   * Se a limpeza do Redis falhar após o `COMMIT`, o pedido continua concluído e o serviço retorna `cartCleared: false`; a falha não pode induzir uma nova tentativa de criação do pedido.
+
+Submissões simultâneas do mesmo carrinho não possuem chave de idempotência neste protótipo. A prevenção de *oversell* permanece garantida pelos locks, mas a deduplicação de pedidos fica fora do escopo atual.
 
 ### 3.4. Consulta de Histórico de Pedidos ("Meus Pedidos")
 

@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-50: #f0f9ff;
+  --color-brand-600: #0369a1;
+  --color-brand-700: #075985;
+  --color-brand-800: #0c4a6e;
+  --color-success-100: #d1fae5;
+  --color-success-800: #065f46;
+  --color-danger-100: #ffe4e6;
+  --color-danger-700: #be123c;
+  --color-danger-800: #9f1239;
+}
+
 :root {
   color-scheme: light;
   font-family: Arial, Helvetica, sans-serif;

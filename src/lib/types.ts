@@ -34,6 +34,18 @@ export type Session = {
   email: string;
 };
 
+export type PublicUser = {
+  id: number;
+  name: string;
+  email: string;
+};
+
+export type UserRecord = PublicUser & {
+  passwordHash: string;
+  address: string | null;
+  isActive: boolean;
+};
+
 export type PlacedOrderItem = {
   externalId: number;
   title: string;

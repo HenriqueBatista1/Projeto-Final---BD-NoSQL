@@ -4,171 +4,127 @@ import type {
   CatalogRepository,
   OrderAndInventoryRepository,
 } from "../../src/lib/repositories/contracts";
-import type { ProductRecord, SuggestedProduct } from "../../src/lib/types";
 import { CatalogService } from "../../src/lib/services/catalog";
+import type { ProductRecord, SuggestedProduct } from "../../src/lib/types";
 
-const RING: ProductRecord = {
-  externalId: 7,
-  title: "Silver Ring",
-  price: 19.99,
-  description: "A polished ring",
-  category: "jewelery",
-  image: "https://example.test/ring.png",
-  rating: { rate: 4.2, count: 18 },
-};
+const PRODUCTS: ProductRecord[] = [
+  {
+    externalId: 9,
+    title: "Nine",
+    price: 12.5,
+    description: "Product nine",
+    category: "test",
+    image: "https://example.test/nine.png",
+    rating: { rate: 4.5, count: 20 },
+  },
+  {
+    externalId: 3,
+    title: "Three",
+    price: 4,
+    description: "Product three",
+    category: "test",
+    image: "https://example.test/three.png",
+    rating: { rate: 4, count: 10 },
+  },
+];
 
-const BOOK: ProductRecord = {
-  externalId: 11,
-  title: "Everyday Backpack",
-  price: 39.99,
-  description: "A practical backpack",
-  category: "men's clothing",
-  image: "https://example.test/backpack.png",
-  rating: { rate: 4.5, count: 25 },
-};
-
-type CatalogFakesOptions = {
-  products?: ProductRecord[];
-  detail?: ProductRecord | null;
-  categories?: string[];
-  suggestions?: SuggestedProduct[];
-  stocks?: Map<number, number>;
-};
-
-function catalogFakes(options: CatalogFakesOptions = {}) {
+function catalogFake(products = PRODUCTS) {
   const calls = {
-    list: [] as Array<string | undefined>,
+    lists: [] as Array<string | undefined>,
     details: [] as number[],
     categories: 0,
     suggestions: [] as string[],
-    stockRequests: [] as number[][],
   };
+  const suggestions: SuggestedProduct[] = [{
+    externalId: 9,
+    title: "Nine",
+    price: 12.5,
+    image: "https://example.test/nine.png",
+  }];
 
-  const catalogRepository: CatalogRepository = {
-    async list(category) {
-      calls.list.push(category);
-      return options.products ?? [];
+  const repository: CatalogRepository = {
+    async list(category?: string) {
+      calls.lists.push(category);
+      return products;
     },
-    async findByExternalIds() {
-      return [];
+    async findByExternalIds(ids: number[]) {
+      return products.filter((product) => ids.includes(product.externalId));
     },
-    async findByExternalId(externalId) {
-      calls.details.push(externalId);
-      return options.detail === undefined ? RING : options.detail;
+    async findByExternalId(id: number) {
+      calls.details.push(id);
+      return products.find((product) => product.externalId === id) ?? null;
     },
     async listCategories() {
       calls.categories += 1;
-      return options.categories ?? [];
+      return ["test"];
     },
-    async suggest(query) {
+    async suggest(query: string) {
       calls.suggestions.push(query);
-      return options.suggestions ?? [];
+      return suggestions;
     },
   };
 
-  const inventoryRepository: OrderAndInventoryRepository = {
-    async stocksFor(ids) {
-      calls.stockRequests.push([...ids]);
-      return options.stocks ?? new Map();
-    },
-    async placeOrder() {
-      throw new Error("placeOrder should not be called by CatalogService");
-    },
-    async history() {
-      throw new Error("history should not be called by CatalogService");
-    },
-  };
-
-  return {
-    calls,
-    service: new CatalogService(catalogRepository, inventoryRepository),
-  };
+  return { calls, repository, suggestions };
 }
 
-test("catalog list enriches products with one batched stock lookup", async () => {
-  const fake = catalogFakes({
-    products: [RING, BOOK],
-    stocks: new Map([
-      [7, 4],
-      [11, 9],
-    ]),
-  });
+function inventoryFake(stocks: Map<number, number>) {
+  const calls: number[][] = [];
+  const repository: Pick<OrderAndInventoryRepository, "stocksFor"> = {
+    async stocksFor(ids: number[]) {
+      calls.push(ids);
+      return stocks;
+    },
+  };
 
-  const products = await fake.service.list("jewelery");
+  return { calls, repository };
+}
 
-  assert.deepEqual(fake.calls.list, ["jewelery"]);
-  assert.deepEqual(fake.calls.stockRequests, [[7, 11]]);
-  assert.deepEqual(products, [
-    { ...RING, stock: 4 },
-    { ...BOOK, stock: 9 },
+test("catalog service hydrates products with one stock lookup and preserves order", async () => {
+  const catalog = catalogFake();
+  const inventory = inventoryFake(new Map([[9, 7]]));
+  const service = new CatalogService(catalog.repository, inventory.repository);
+
+  const products = await service.list("test");
+
+  assert.deepEqual(catalog.calls.lists, ["test"]);
+  assert.deepEqual(inventory.calls, [[9, 3]]);
+  assert.deepEqual(products.map(({ externalId, stock }) => ({ externalId, stock })), [
+    { externalId: 9, stock: 7 },
+    { externalId: 3, stock: 0 },
   ]);
 });
 
-test("catalog list uses zero when a product is absent from the stock map", async () => {
-  const fake = catalogFakes({
-    products: [RING, BOOK],
-    stocks: new Map([[7, 4]]),
-  });
+test("catalog service avoids inventory reads for an empty catalog", async () => {
+  const catalog = catalogFake([]);
+  const inventory = inventoryFake(new Map());
+  const service = new CatalogService(catalog.repository, inventory.repository);
 
-  const products = await fake.service.list();
-
-  assert.deepEqual(
-    products.map(({ externalId, stock }) => ({ externalId, stock })),
-    [
-      { externalId: 7, stock: 4 },
-      { externalId: 11, stock: 0 },
-    ],
-  );
+  assert.deepEqual(await service.list(), []);
+  assert.deepEqual(inventory.calls, []);
 });
 
-test("empty catalog list skips the stock lookup", async () => {
-  const fake = catalogFakes({ products: [] });
+test("catalog service hydrates product details and preserves missing products", async () => {
+  const catalog = catalogFake();
+  const inventory = inventoryFake(new Map([[3, 6]]));
+  const service = new CatalogService(catalog.repository, inventory.repository);
 
-  assert.deepEqual(await fake.service.list(), []);
-  assert.deepEqual(fake.calls.list, [undefined]);
-  assert.deepEqual(fake.calls.stockRequests, []);
-});
-
-test("catalog detail enriches an existing product and skips stock for a miss", async () => {
-  const existing = catalogFakes({
-    detail: BOOK,
-    stocks: new Map([[11, 6]]),
-  });
-  const missing = catalogFakes({ detail: null });
-
-  assert.deepEqual(await existing.service.findByExternalId(11), {
-    ...BOOK,
+  assert.deepEqual(await service.findByExternalId(3), {
+    ...PRODUCTS[1],
     stock: 6,
   });
-  assert.deepEqual(existing.calls.details, [11]);
-  assert.deepEqual(existing.calls.stockRequests, [[11]]);
-
-  assert.equal(await missing.service.findByExternalId(999), null);
-  assert.deepEqual(missing.calls.details, [999]);
-  assert.deepEqual(missing.calls.stockRequests, []);
+  assert.equal(await service.findByExternalId(404), null);
+  assert.deepEqual(catalog.calls.details, [3, 404]);
+  assert.deepEqual(inventory.calls, [[3]]);
 });
 
-test("catalog categories are delegated to the repository", async () => {
-  const fake = catalogFakes({ categories: ["electronics", "jewelery"] });
+test("catalog service delegates categories and suggestions", async () => {
+  const catalog = catalogFake();
+  const inventory = inventoryFake(new Map());
+  const service = new CatalogService(catalog.repository, inventory.repository);
 
-  assert.deepEqual(await fake.service.listCategories(), [
-    "electronics",
-    "jewelery",
-  ]);
-  assert.equal(fake.calls.categories, 1);
-});
-
-test("catalog suggestions are delegated without changing the query", async () => {
-  const suggestions: SuggestedProduct[] = [
-    {
-      externalId: 7,
-      title: RING.title,
-      price: RING.price,
-      image: RING.image,
-    },
-  ];
-  const fake = catalogFakes({ suggestions });
-
-  assert.deepEqual(await fake.service.suggest(" ring "), suggestions);
-  assert.deepEqual(fake.calls.suggestions, [" ring "]);
+  assert.deepEqual(await service.listCategories(), ["test"]);
+  assert.deepEqual(await service.suggest(" ni "), catalog.suggestions);
+  assert.equal(catalog.calls.categories, 1);
+  assert.deepEqual(catalog.calls.suggestions, [" ni "]);
+  assert.deepEqual(inventory.calls, []);
 });

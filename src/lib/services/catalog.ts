@@ -1,58 +1,49 @@
 import type {
-  CatalogRepository as CatalogRepositoryContract,
-  OrderAndInventoryRepository as OrderAndInventoryRepositoryContract,
+  CatalogRepository,
+  OrderAndInventoryRepository,
 } from "../repositories/contracts";
-import { CatalogRepository } from "../repositories/catalog";
-import { OrderAndInventoryRepository } from "../repositories/orders-inventory";
-import type {
-  Product,
-  ProductRecord,
-  SuggestedProduct,
-} from "../types";
+import type { Product, ProductRecord, SuggestedProduct } from "../types";
 
 export class CatalogService {
   constructor(
-    private readonly catalogRepository: CatalogRepositoryContract =
-      new CatalogRepository(),
-    private readonly inventoryRepository: OrderAndInventoryRepositoryContract =
-      new OrderAndInventoryRepository(),
+    private readonly catalog: CatalogRepository,
+    private readonly inventory: Pick<OrderAndInventoryRepository, "stocksFor">,
   ) {}
 
-  async list(category?: string): Promise<Product[]> {
-    const products = await this.catalogRepository.list(category);
-    return this.withStock(products);
-  }
-
-  async findByExternalId(externalId: number): Promise<Product | null> {
-    const product =
-      await this.catalogRepository.findByExternalId(externalId);
-    if (!product) {
-      return null;
-    }
-
-    const [enrichedProduct] = await this.withStock([product]);
-    return enrichedProduct ?? null;
-  }
-
-  async listCategories(): Promise<string[]> {
-    return this.catalogRepository.listCategories();
-  }
-
-  async suggest(query: string): Promise<SuggestedProduct[]> {
-    return this.catalogRepository.suggest(query);
-  }
-
-  private async withStock(products: ProductRecord[]): Promise<Product[]> {
+  private async hydrateStock(products: ProductRecord[]): Promise<Product[]> {
     if (products.length === 0) {
       return [];
     }
 
-    const externalIds = products.map(({ externalId }) => externalId);
-    const stocks = await this.inventoryRepository.stocksFor(externalIds);
+    const stocks = await this.inventory.stocksFor(
+      products.map((product) => product.externalId),
+    );
 
     return products.map((product) => ({
       ...product,
       stock: stocks.get(product.externalId) ?? 0,
     }));
+  }
+
+  async list(category?: string): Promise<Product[]> {
+    return this.hydrateStock(await this.catalog.list(category));
+  }
+
+  async findByExternalId(id: number): Promise<Product | null> {
+    const product = await this.catalog.findByExternalId(id);
+    if (!product) {
+      return null;
+    }
+
+    const [hydratedProduct] = await this.hydrateStock([product]);
+    return hydratedProduct;
+  }
+
+  async listCategories(): Promise<string[]> {
+    return this.catalog.listCategories();
+  }
+
+  async suggest(query: string): Promise<SuggestedProduct[]> {
+    return this.catalog.suggest(query);
   }
 }

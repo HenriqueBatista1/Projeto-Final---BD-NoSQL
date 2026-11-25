@@ -36,6 +36,12 @@ export type HydratedCartItem = CartItem & {
   title: string; price: number; image: string; stock: number; available: boolean;
 };
 export type Session = { userId: number; name: string; email: string };
+export type PublicUser = {
+  id: number; name: string; email: string;
+};
+export type UserRecord = PublicUser & {
+  passwordHash: string; address: string | null; isActive: boolean;
+};
 export type PlacedOrderItem = {
   externalId: number; title: string; unitPrice: number; quantity: number;
 };
@@ -73,9 +79,16 @@ interface OrderAndInventoryRepository {
   }): Promise<{ orderId: number; createdAt: string }>;
   history(userId: number): Promise<Order[]>;
 }
+
+// src/lib/repositories/users.ts
+interface UserRepository {
+  findByEmail(email: string): Promise<UserRecord | null>;
+  findById(id: number): Promise<UserRecord | null>;
+  listActive(): Promise<PublicUser[]>;
+}
 ```
 
-Repositórios devem **aceitar o cliente por injeção** (padrão com fallback para o singleton de `src/lib/db/`) para que os testes usem fakes sem rede. Cookie de sessão: nome `polyglot_session`, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age=7200`. TTL do carrinho: `86400`.
+Repositórios devem **aceitar o cliente por injeção** (padrão com fallback para o singleton de `src/lib/db/`) para que os testes usem fakes sem rede. Cookie de sessão: nome `polyglot_session`, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age=7200` e `Secure` em produção. TTL do carrinho: `86400`.
 
 ---
 
@@ -136,35 +149,45 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 - `history`: join `orders`/`order_items`, ordenado por `created_at DESC, oi.id ASC`, agrupado em `Order[]` na camada de serviço (pode agrupar aqui se preferir — manter um único dono da lógica).
 - **Critérios:** testes com fake de client/query cobrem rollback sem debitar estoque, ordem dos locks, snapshot e agrupamento do histórico.
 
+### [X] B4. `UserRepository` — PostgreSQL — *concluído como suporte aprovado para C4*
+
+- **Arquivos:** `src/lib/repositories/users.ts`, `tests/persistence/users.test.ts`, `src/lib/repositories/contracts.ts`, `src/lib/types.ts`.
+- Consultar usuário por email ou ID para autenticação interna e listar somente usuários ativos sem selecionar/expor `password_hash`.
+- Aceitar `Pool` por injeção, com fallback preguiçoso para o singleton PostgreSQL.
+- **Critérios:** testes com fake cobrem queries, ausência de usuário, filtro de ativos e não exposição do hash.
+
 ---
 
 ## Épico C — Regras de negócio e orquestração
 
-### [ ] C1. `CatalogService` — composição Mongo + PostgreSQL — *depende de B1, B3 (usar contratos)*
+### [X] C1. `CatalogService` — composição Mongo + PostgreSQL — *concluído*
 
 - **Arquivos:** `src/lib/services/catalog.ts`, `tests/services/catalog.test.ts`.
 - Busca no Mongo, extrai `externalId[]`, busca estoques em lote no Postgres e injeta `stock` em cada produto em `O(N)`. Reexportar `suggest` com a guard clause já aplicada no repositório.
 - **Critérios:** teste prova uma única chamada de `stocksFor` com N produtos e `stock` correto em cada item.
 
-### [ ] C2. `CartService` — hidratação do carrinho — *depende de B1, B2, B3*
+### [X] C2. `CartService` — hidratação do carrinho — *concluído*
 
 - **Arquivos:** `src/lib/services/cart.ts`, `tests/services/cart.test.ts`.
 - `HGETALL` → busca detalhes no Mongo (`$in`) → estoque no Postgres → itens hidratados com `available: cartQuantity <= stock`. Carrinho vazio retorna `[]` sem consultar outros bancos.
-- **Critérios:** teste cobre carrinho vazio, item indisponível e item válido; nenhuma leitura de banco quando vazio.
+- Se algum ID do carrinho não existir no catálogo, lançar `CartProductUnavailableError` e preservar integralmente o Hash Redis.
+- **Critérios:** teste cobre carrinho vazio, item indisponível, item válido e produto ausente do catálogo; nenhuma leitura de banco quando vazio e nenhuma mutação Redis no erro.
 
-### [ ] C3. `CheckoutService` — transação poliglota — *depende de B2, B3*
+### [X] C3. `CheckoutService` — transação poliglota — *concluído; depende de B1, B2, B3*
 
 - **Arquivos:** `src/lib/services/checkout.ts`, `tests/services/checkout.test.ts`.
 - Ordem obrigatória: ler carrinho → buscar preços oficiais no Mongo → ordenar por `externalId` → `placeOrder` → **somente após o commit** `clearCart`. Estoque insuficiente lança erro amigável e mantém o carrinho intacto.
+- Endereço livre obrigatório; pagamento restrito a `PIX | CARTAO_CREDITO`; produto ausente aborta todo o checkout. Falha de limpeza pós-commit retorna o pedido com `cartCleared: false`.
 - **Critérios:** testes cobrem carrinho vazio, preço do cliente ignorado, falha no estoque sem apagar carrinho, e `clearCart` chamado depois de `placeOrder`.
 
-### [ ] C4. `AuthService` — sessão e cookie — *depende de B2*
+### [X] C4. `AuthService` — autenticação demo e sessão — *concluído; depende de B2, B4*
 
-- **Arquivos:** `src/lib/services/auth.ts`, `tests/services/auth.test.ts`.
-- Login por `email` + `scryptSync` com o salt do seed; seleção rápida de usuário do seed; emissão de token e escrita do cookie `HttpOnly`; leitura e invalidação da sessão.
-- **Critérios:** testes cobrem senha errada, cookie com atributos corretos, token inexistente/expirado e logout.
+- **Arquivos:** `src/lib/services/auth.ts`, `tests/services/auth.test.ts`, com usuários fornecidos por B4.
+- Login demo por `email` + `scryptSync` com o salt do seed; seleção rápida por ID apenas de usuário ativo; emissão, leitura e invalidação da sessão Redis. Sem cadastro.
+- O serviço não escreve cookies. C6 gerenciará `polyglot_session` com `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age=7200` e `Secure` em produção.
+- **Critérios:** testes cobrem senha errada, usuário inativo, seleção rápida, token inexistente/expirado, logout e não exposição do hash.
 
-### [ ] C5. `OrderHistoryService` — *depende de B3*
+### [X] C5. `OrderHistoryService` — *concluído*
 
 - **Arquivos:** `src/lib/services/order-history.ts`, `tests/services/order-history.test.ts`.
 - Degana `Order[]` para a UI (formatação de moeda/data opcional aqui, nunca no banco). Sem dependência do Mongo.
@@ -180,7 +203,7 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 
 ## Épico D — Interface (App Router)
 
-### [ ] D1. Design system e shell da loja — *pode começar agora (após A1)*
+### [X] D1. Design system e shell da loja — *concluído*
 
 - **Arquivos:** `app/(store)/layout.tsx`, `src/components/ui/**`, `src/lib/utils/cn.ts`.
 - Tokens Tailwind, botões, inputs, cards, badges de estoque, drawer base, navbar com link para "Meus Pedidos" e logout. Sem lógica de negócio.
@@ -248,7 +271,7 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 
 ## Épico F — Deploy e entrega
 
-### [ ] F1. Deploy na Vercel — *depende de A1, A3*
+### [ ] F1. Deploy na Vercel — *baixa prioridade; depende de A1, A3*
 
 - **Arquivos:** `vercel.json` (se necessário), `docs/DEPLOY.md`.
 - Configurar `POSTGRES_URL`, `MONGODB_URI`, `REDIS_URL` no painel; documentar pooler em modo session e Network Access do Atlas liberado para IPs da Vercel; manter projeto Supabase ativo antes das demo.
@@ -268,12 +291,12 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 
 ---
 
-## Decisões em aberto (resolver antes dos pacotes C3/D5)
+## Decisões de arquitetura
 
-- [ ] **Endereço de entrega:** usar o endereço do usuário em `users.address` com opção de edição no checkout, ou campo livre obrigatório? Definir em `docs/ARCHITECTURE.md` e avisar quem implementa C3/D5.
-- [ ] **Forma de pagamento:** aceitar qualquer string validada ou enumerar opções fixas? Hoje a coluna é `VARCHAR(30)` sem restrição, e `status` só aceita `PAGO`.
+- [X] **Endereço de entrega:** campo livre obrigatório, validado pela action antes de C3.
+- [X] **Forma de pagamento:** opções fixas `PIX` e `CARTAO_CREDITO`.
 - [ ] **Seed de Mongo:** manter `upsert` (não remove produtos que saíram da API) ou passar a sincronizar remoções? Importante para a idempotência esperada.
-- [ ] **Auth:** confirmar que login com senha é apenas demo (salt fixo) e que não haverá cadastro de novos usuários na UI.
+- [X] **Auth:** login exclusivamente demonstrativo com salt fixo, seleção rápida de usuários ativos e nenhum cadastro na UI.
 
 ## Fora de escopo
 
@@ -293,12 +316,14 @@ flowchart TD
     B1["B1 · CatalogRepository"]
     B2["B2 · CartAndSessionRepository"]
     B3["B3 · OrderAndInventoryRepository"]
+    B4["B4 · UserRepository"]
     DEC["DEC · Decisões em aberto"]
 
     %% Contratos e acompanhamento (tracejado = não bloqueia o início)
     A2 -.-> B1
     A2 -.-> B2
     A2 -.-> B3
+    A2 -.-> B4
     A2 -.-> C6
     C1 -.-> E1
     C2 -.-> E1
@@ -323,9 +348,10 @@ flowchart TD
     B3 --> C2
     B2 --> C3
     B3 --> C3
+    B1 --> C3
     B2 --> C4
+    B4 --> C4
     B3 --> C5
-    DEC --> C3
 
     %% Serviços -> Actions -> Telas
     C1 --> C6
@@ -343,7 +369,6 @@ flowchart TD
     D1 --> D4
     D1 --> D6
     D4 --> D5
-    DEC --> D5
 
     %% Verificação
     C3 --> E2
@@ -365,7 +390,7 @@ flowchart TD
     classDef ops fill:#eceff4,stroke:#5c6b7a,color:#1f2933;
 
     class A1,A2,A3,A4 fund;
-    class B1,B2,B3 repo;
+    class B1,B2,B3,B4 repo;
     class C1,C2,C3,C4,C5,C6 svc;
     class D1,D2,D3,D4,D5,D6 ui;
     class E1,E2,E3,E4 qa;
@@ -376,18 +401,18 @@ flowchart TD
 
 - **Aresta sólida:** dependência real — o pacote de destino não deve ser considerado pronto antes do de origem.
 - **Aresta tracejada:** dependência de contrato ou acompanhamento. O trabalho **pode começar antes** do merge (use as assinaturas da seção [Contratos compartilhados](#contratos-compartilhados)); só a integração final espera.
-- **`DEC`** são as [decisões em aberto](#decisões-em-aberto-resolver-antes-dos-pacotes-c3d5): bloqueiam C3 e D5, nada mais.
+- **`DEC`** acompanha decisões documentais remanescentes. As decisões que bloqueavam C3/D5 já foram resolvidas; apenas a política de remoção do seed Mongo continua aberta e não bloqueia o DAG atual.
 
-**Caminho crítico:** `B2/B3 → C3/C4 → C6 → D4 → D5 → E4`. É a cadeia mais longa; priorize esses pacotes na escalação. `A1 → D1` entra em paralelo e alimenta o mesmo caminho em D4.
+**Caminho crítico:** `B1/B2/B3/B4 → C3/C4 → C6 → D4 → D5 → E4`. É a cadeia mais longa; priorize esses pacotes na escalação. `A1 → D1` entra em paralelo e alimenta o mesmo caminho em D4.
 
 **Onda de execução** (linhas de uma mesma onda podem rodar em branches simultâneos):
 
 | Onda | Pacotes                         | Observação                                                                            |
 | ---- | ------------------------------- | --------------------------------------------------------------------------------------- |
-| 0    | A1, A2, A3, A4, B1, B2, B3, DEC | Todo mundo começa junto; A2 e DEC são contratos/decisões, não bloqueiam as raízes. |
-| 1    | C1, C2, C3, C4, C5, D1, F1      | D1 só espera A1; C* usa os contratos mesmo com B* em andamento.                        |
+| 0    | A1, A2, A3, A4, B1, B2, B3, B4, DEC | Raízes e contratos compartilhados; B4 foi acrescentado para suportar C4. |
+| 1    | C1, C2, C3, C4, C5, D1          | D1 só espera A1; C* usa os contratos mesmo com B* em andamento.                        |
 | 2    | C6, E1, E2, F3                  | C6 é o gargalo de integração; E1 acompanha os serviços.                             |
 | 3    | D2, D3, D4, D6, E3              | Telas em paralelo, cada uma dona da sua pasta.                                          |
 | 4    | D5                              | Precisa de C3, C6 e do drawer D4.                                                       |
-| 5    | E4                              | Valida as jornadas completas.                                                           |
+| 5    | E4, F1                          | Valida as jornadas completas; deploy fica em baixa prioridade.                          |
 | 6    | F2                              | Guia final, após concorrência e deploy estarem provados.                              |

@@ -2,11 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 
-const {
-  InsufficientStockError,
-  InvalidOrderError,
-  OrderAndInventoryRepository,
-} = await import("../../src/lib/repositories/orders-inventory");
+const { InsufficientStockError } = await import("../../src/lib/errors");
+const { InvalidOrderError, OrderAndInventoryRepository } = await import(
+  "../../src/lib/repositories/orders-inventory"
+);
 
 type QueryCall = { sql: string; values?: unknown[] };
 

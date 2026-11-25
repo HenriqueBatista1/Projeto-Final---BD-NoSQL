@@ -7,208 +7,178 @@ import type {
 } from "../../src/lib/repositories/contracts";
 import type { ProductRecord } from "../../src/lib/types";
 import {
-  CartProductNotFoundError,
+  CartProductUnavailableError,
   CartService,
 } from "../../src/lib/services/cart";
 
-const RING: ProductRecord = {
-  externalId: 7,
-  title: "Silver Ring",
-  price: 19.99,
-  description: "A polished ring",
-  category: "jewelery",
-  image: "https://example.test/ring.png",
-  rating: { rate: 4.2, count: 18 },
-};
+type CartReader = Pick<CartAndSessionRepository, "getCart">;
+type CatalogReader = Pick<CatalogRepository, "findByExternalIds">;
+type InventoryReader = Pick<OrderAndInventoryRepository, "stocksFor">;
 
-const BOOK: ProductRecord = {
-  externalId: 11,
-  title: "Everyday Backpack",
-  price: 39.99,
-  description: "A practical backpack",
-  category: "men's clothing",
-  image: "https://example.test/backpack.png",
-  rating: { rate: 4.5, count: 25 },
-};
+const PRODUCTS: ProductRecord[] = [
+  {
+    externalId: 3,
+    title: "Three",
+    price: 4,
+    description: "Third product",
+    category: "test",
+    image: "https://example.test/three.png",
+    rating: { rate: 4, count: 3 },
+  },
+  {
+    externalId: 9,
+    title: "Nine",
+    price: 12.5,
+    description: "Ninth product",
+    category: "test",
+    image: "https://example.test/nine.png",
+    rating: { rate: 4.5, count: 9 },
+  },
+];
 
-type CartFakesOptions = {
-  cart?: Record<number, number>;
-  products?: ProductRecord[];
-  stocks?: Map<number, number>;
-  failure?: { repository: "cart" | "catalog" | "stock"; error: Error };
-};
-
-function cartFakes(options: CartFakesOptions = {}) {
-  const calls = {
-    cart: [] as number[],
-    catalog: [] as number[][],
-    stocks: [] as number[][],
-  };
-
-  const cartRepository: CartAndSessionRepository = {
+test("empty carts do not query catalog or inventory", async () => {
+  const cartRepository: CartReader = {
     async getCart(userId) {
-      calls.cart.push(userId);
-      if (options.failure?.repository === "cart") {
-        throw options.failure.error;
-      }
-      return options.cart ?? {};
-    },
-    async addItem() {
-      throw new Error("addItem should not be called by CartService");
-    },
-    async removeItem() {
-      throw new Error("removeItem should not be called by CartService");
-    },
-    async clearCart() {
-      throw new Error("clearCart should not be called by CartService");
-    },
-    async createSession() {
-      throw new Error("createSession should not be called by CartService");
-    },
-    async getSession() {
-      throw new Error("getSession should not be called by CartService");
-    },
-    async deleteSession() {
-      throw new Error("deleteSession should not be called by CartService");
+      assert.equal(userId, 7);
+      return {};
     },
   };
-
-  const catalogRepository: CatalogRepository = {
-    async list() {
-      throw new Error("list should not be called by CartService");
-    },
-    async findByExternalIds(ids) {
-      calls.catalog.push([...ids]);
-      if (options.failure?.repository === "catalog") {
-        throw options.failure.error;
-      }
-      return options.products ?? [];
-    },
-    async findByExternalId() {
-      throw new Error("findByExternalId should not be called by CartService");
-    },
-    async listCategories() {
-      throw new Error("listCategories should not be called by CartService");
-    },
-    async suggest() {
-      throw new Error("suggest should not be called by CartService");
+  const catalogRepository: CatalogReader = {
+    async findByExternalIds() {
+      throw new Error("catalog must not be queried");
     },
   };
-
-  const inventoryRepository: OrderAndInventoryRepository = {
-    async stocksFor(ids) {
-      calls.stocks.push([...ids]);
-      if (options.failure?.repository === "stock") {
-        throw options.failure.error;
-      }
-      return options.stocks ?? new Map();
-    },
-    async placeOrder() {
-      throw new Error("placeOrder should not be called by CartService");
-    },
-    async history() {
-      throw new Error("history should not be called by CartService");
+  const inventoryRepository: InventoryReader = {
+    async stocksFor() {
+      throw new Error("inventory must not be queried");
     },
   };
+  const service = new CartService(
+    cartRepository,
+    catalogRepository,
+    inventoryRepository,
+  );
 
-  return {
-    calls,
-    service: new CartService(
-      cartRepository,
-      catalogRepository,
-      inventoryRepository,
-    ),
-  };
-}
-
-test("empty cart returns an empty list without querying other repositories", async () => {
-  const fake = cartFakes({ cart: {} });
-
-  assert.deepEqual(await fake.service.getCart(42), []);
-  assert.deepEqual(fake.calls.cart, [42]);
-  assert.deepEqual(fake.calls.catalog, []);
-  assert.deepEqual(fake.calls.stocks, []);
+  assert.deepEqual(await service.getCart(7), []);
 });
 
-test("cart hydrates items by external ID with one catalog and stock lookup", async () => {
-  const fake = cartFakes({
-    cart: { 7: 2, 11: 1 },
-    products: [BOOK, RING],
-    stocks: new Map([
-      [7, 4],
-      [11, 1],
-    ]),
-  });
+test("cart hydration combines product details and batched stocks", async () => {
+  const calls = {
+    catalog: [] as number[][],
+    inventory: [] as number[][],
+  };
+  const cartRepository: CartReader = {
+    async getCart() {
+      return { 3: 2, 9: 4 };
+    },
+  };
+  const catalogRepository: CatalogReader = {
+    async findByExternalIds(ids) {
+      calls.catalog.push(ids);
+      return [...PRODUCTS].reverse();
+    },
+  };
+  const inventoryRepository: InventoryReader = {
+    async stocksFor(ids) {
+      calls.inventory.push(ids);
+      return new Map([[3, 5], [9, 1]]);
+    },
+  };
+  const service = new CartService(
+    cartRepository,
+    catalogRepository,
+    inventoryRepository,
+  );
 
-  assert.deepEqual(await fake.service.getCart(42), [
+  assert.deepEqual(await service.getCart(1), [
     {
-      externalId: 7,
+      externalId: 3,
       quantity: 2,
-      title: RING.title,
-      price: RING.price,
-      image: RING.image,
-      stock: 4,
+      title: "Three",
+      price: 4,
+      image: "https://example.test/three.png",
+      stock: 5,
       available: true,
     },
     {
-      externalId: 11,
-      quantity: 1,
-      title: BOOK.title,
-      price: BOOK.price,
-      image: BOOK.image,
+      externalId: 9,
+      quantity: 4,
+      title: "Nine",
+      price: 12.5,
+      image: "https://example.test/nine.png",
       stock: 1,
-      available: true,
+      available: false,
     },
   ]);
-  assert.deepEqual(fake.calls.catalog, [[7, 11]]);
-  assert.deepEqual(fake.calls.stocks, [[7, 11]]);
+  assert.deepEqual(calls.catalog, [[3, 9]]);
+  assert.deepEqual(calls.inventory, [[3, 9]]);
 });
 
-test("unavailable cart items reflect current and missing stock", async () => {
-  const fake = cartFakes({
-    cart: { 7: 3, 11: 1 },
-    products: [RING, BOOK],
-    stocks: new Map([[7, 2]]),
-  });
-
-  const items = await fake.service.getCart(42);
-
-  assert.deepEqual(
-    items.map(({ externalId, stock, available }) => ({
-      externalId,
-      stock,
-      available,
-    })),
-    [
-      { externalId: 7, stock: 2, available: false },
-      { externalId: 11, stock: 0, available: false },
-    ],
+test("missing inventory is treated as zero stock", async () => {
+  const service = new CartService(
+    { async getCart() { return { 3: 1 }; } },
+    { async findByExternalIds() { return [PRODUCTS[0]]; } },
+    { async stocksFor() { return new Map(); } },
   );
+
+  const items = await service.getCart(1);
+
+  assert.equal(items[0]?.stock, 0);
+  assert.equal(items[0]?.available, false);
 });
 
-test("missing catalog product rejects and skips stock lookup", async () => {
-  const fake = cartFakes({
-    cart: { 7: 1, 11: 1 },
-    products: [RING],
-  });
+test("missing catalog products reject hydration without mutating the cart", async () => {
+  const mutations: string[] = [];
+  const cartRepository: CartReader & Pick<
+    CartAndSessionRepository,
+    "addItem" | "removeItem" | "clearCart"
+  > = {
+    async getCart() {
+      return { 3: 1, 9: 2, 11: 1 };
+    },
+    async addItem() {
+      mutations.push("addItem");
+      return 1;
+    },
+    async removeItem() {
+      mutations.push("removeItem");
+    },
+    async clearCart() {
+      mutations.push("clearCart");
+    },
+  };
+  const inventoryRepository: InventoryReader = {
+    async stocksFor() {
+      throw new Error("inventory must not be queried");
+    },
+  };
+  const service = new CartService(
+    cartRepository,
+    { async findByExternalIds() { return [PRODUCTS[0]]; } },
+    inventoryRepository,
+  );
 
   await assert.rejects(
-    fake.service.getCart(42),
-    (error: unknown) =>
-      error instanceof CartProductNotFoundError &&
-      error.message === "Product 11 not found in catalog",
+    service.getCart(1),
+    (error: unknown) => {
+      assert.ok(error instanceof CartProductUnavailableError);
+      assert.deepEqual(error.missingExternalIds, [9, 11]);
+      return true;
+    },
   );
-  assert.deepEqual(fake.calls.catalog, [[7, 11]]);
-  assert.deepEqual(fake.calls.stocks, []);
+  assert.deepEqual(mutations, []);
 });
 
-test("repository failures are propagated unchanged", async () => {
+test("inventory failures are propagated unchanged", async () => {
   const failure = new Error("inventory unavailable");
-  const fake = cartFakes({
-    cart: { 7: 1 },
-    products: [RING],
-    failure: { repository: "stock", error: failure },
-  });
+  const service = new CartService(
+    { async getCart() { return { 3: 1 }; } },
+    { async findByExternalIds() { return [PRODUCTS[0]]; } },
+    { async stocksFor() { throw failure; } },
+  );
 
-  await assert.rejects(fake.service.getCart(42), (error: unknown) => error === failure);
+  await assert.rejects(
+    service.getCart(1),
+    (error: unknown) => error === failure,
+  );
 });

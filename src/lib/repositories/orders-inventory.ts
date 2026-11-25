@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { InsufficientStockError } from "../errors";
 import type { OrderAndInventoryRepository as OrderAndInventoryRepositoryContract } from "./contracts";
 import type { Order, PlacedOrderItem } from "../types";
 
@@ -35,13 +36,6 @@ type OrderHistoryRow = {
 
 function dateToString(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : value;
-}
-
-export class InsufficientStockError extends Error {
-  constructor(externalId: number) {
-    super(`Insufficient stock for product ${externalId}`);
-    this.name = "InsufficientStockError";
-  }
 }
 
 export class InvalidOrderError extends Error {
