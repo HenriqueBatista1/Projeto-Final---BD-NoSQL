@@ -3,6 +3,7 @@
 import Image from "next/image";
 import type { Product } from "@/lib/types";
 import { Button, Card, CardContent, CardTitle, StockBadge } from "@/components/ui";
+import { useCart } from "@/components/cart/cart-context";
 
 type ProductCardProps = {
   product: Product;
@@ -10,7 +11,8 @@ type ProductCardProps = {
   loading?: boolean;
 };
 
-export function ProductCard({ product, onAddToCart, loading }: ProductCardProps) {
+export function ProductCard({ product }: { product: Product }) {
+  const { addItem, loading } = useCart();
   const isOutOfStock = product.stock <= 0;
 
   // Formata o preço para moeda brasileira (R$) ou dólares
@@ -62,7 +64,7 @@ export function ProductCard({ product, onAddToCart, loading }: ProductCardProps)
           <Button
             size="sm"
             disabled={isOutOfStock || loading}
-            onClick={() => onAddToCart?.(product)}
+            onClick={() => addItem(product.externalId)}
             className="whitespace-nowrap"
           >
             {isOutOfStock ? "Esgotado" : "Adicionar"}
