@@ -2,8 +2,10 @@ import type {
   Order,
   PlacedOrderItem,
   ProductRecord,
+  PublicUser,
   Session,
   SuggestedProduct,
+  UserRecord,
 } from "../types";
 
 export interface CatalogRepository {
@@ -33,4 +35,10 @@ export interface OrderAndInventoryRepository {
     items: PlacedOrderItem[];
   }): Promise<{ orderId: number; createdAt: string }>;
   history(userId: number): Promise<Order[]>;
+}
+
+export interface UserRepository {
+  findByEmail(email: string): Promise<UserRecord | null>;
+  findActiveById(id: number): Promise<PublicUser | null>;
+  listActive(): Promise<PublicUser[]>;
 }
