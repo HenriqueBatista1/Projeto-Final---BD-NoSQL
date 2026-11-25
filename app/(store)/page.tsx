@@ -3,6 +3,7 @@ import { CatalogRepository } from "@/lib/repositories/catalog";
 import { OrderAndInventoryRepository } from "@/lib/repositories/orders-inventory";
 import { ProductCard } from "@/components/catalog/product-card";
 import { CategoryFilter } from "@/components/catalog/category-filter";
+import { SearchBar } from "@/components/catalog/search-bar";
 
 type StorePageProps = {
   searchParams: Promise<{
@@ -32,17 +33,21 @@ export default async function StorePage({ searchParams }: StorePageProps) {
   return (
     <div className="space-y-8">
       {/* Cabeçalho da vitrine */}
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
-          {category ? (
-            <span className="capitalize">{category}</span>
-          ) : (
-            "Nosso Catálogo"
-          )}
-        </h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Produtos com dados do MongoDB e inventário transacional do PostgreSQL.
-        </p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
+            {category ? (
+              <span className="capitalize">{category}</span>
+            ) : (
+              "Nosso Catálogo"
+            )}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Produtos com dados do MongoDB e inventário transacional do PostgreSQL.
+          </p>
+        </div>
+        {/* Aqui está a barra de busca! */}
+        <SearchBar />
       </div>
 
       {/* Barra de Filtro de Categorias */}
