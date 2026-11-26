@@ -54,12 +54,25 @@ export function SearchBar() {
     return () => clearTimeout(timeoutId);
   }, [query]);
 
+  const handleSelectSuggestion = (item: SuggestedProduct) => {
+    setQuery(item.title);
+    setIsOpen(false);
+    const element = document.getElementById(`product-${item.externalId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      element.classList.add("ring-2", "ring-indigo-600", "transition-all");
+      setTimeout(() => {
+        element.classList.remove("ring-2", "ring-indigo-600");
+      }, 2000);
+    }
+  };
+
   return (
     <div ref={containerRef} className="relative w-full max-w-md">
       <div className="relative">
         <Input
           type="search"
-          placeholder="Buscar produtos ..."
+          placeholder="Buscar produtos (mín. 2 letras)..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => {
@@ -91,10 +104,7 @@ export function SearchBar() {
                 <li
                   key={item.externalId}
                   className="flex items-center gap-3 p-3 transition-colors hover:bg-slate-50 cursor-pointer"
-                  onClick={() => {
-                    setQuery(item.title);
-                    setIsOpen(false);
-                  }}
+                  onClick={() => handleSelectSuggestion(item)}
                 >
                   <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-slate-50 p-1">
                     <Image

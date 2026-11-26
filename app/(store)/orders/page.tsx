@@ -13,28 +13,12 @@ export default async function OrdersPage() {
     redirect("/login");
   }
 
-  // 1. Busca os pedidos no PostgreSQL
+  // 1. Busca os pedidos no PostgreSQL e enriquece com fotos em lote pelo MongoDB
   const orderHistoryService = new OrderHistoryService(
     new OrderAndInventoryRepository(),
+    new CatalogRepository(),
   );
   const orders = await orderHistoryService.getHistory(session.userId);
-
-  // 2. Coleta todos os IDs de produtos dos pedidos e busca as fotos no MongoDB
-  const allProductIds = Array.from(
-    new Set(
-      orders.flatMap((order) => order.items.map((item) => item.externalId)),
-    ),
-  );
-
-  const catalogRepo = new CatalogRepository();
-  const catalogProducts =
-    allProductIds.length > 0
-      ? await catalogRepo.findByExternalIds(allProductIds)
-      : [];
-
-  const imagesByProductId = new Map(
-    catalogProducts.map((p) => [p.externalId, p.image]),
-  );
 
   return (
     <div className="space-y-8">
@@ -143,7 +127,7 @@ export default async function OrdersPage() {
                         currency: "BRL",
                       }).format(item.unitPrice);
 
-                      const imageUrl = imagesByProductId.get(item.externalId);
+                      const imageUrl = item.image;
 
                       return (
                         <div

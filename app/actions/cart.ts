@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { getCurrentSession } from "./auth";
 import { CartService } from "@/lib/services/cart";
 import { CartAndSessionRepository } from "@/lib/repositories/cart-session";
@@ -7,13 +8,25 @@ import { CatalogRepository } from "@/lib/repositories/catalog";
 import { OrderAndInventoryRepository } from "@/lib/repositories/orders-inventory";
 import type { HydratedCartItem } from "@/lib/types";
 
+const updateCartSchema = z.object({
+  externalId: z.number().int().positive("ID do produto inválido"),
+  quantity: z
+    .number()
+    .int("A quantidade deve ser um número inteiro")
+    .refine((val) => val !== 0, "Quantidade não pode ser zero"),
+});
+
+const removeCartSchema = z.object({
+  externalId: z.number().int().positive("ID do produto inválido"),
+});
+
 function getCartDependencies() {
   const cartRepo = new CartAndSessionRepository();
   const catalogRepo = new CatalogRepository();
   const inventoryRepo = new OrderAndInventoryRepository();
   const cartService = new CartService(cartRepo, catalogRepo, inventoryRepo);
 
-  return { cartRepo, cartService };
+  return { cartRepo, catalogRepo, cartService };
 }
 
 /**
@@ -42,9 +55,24 @@ export async function updateCartItemAction(
     throw new Error("Usuário não autenticado");
   }
 
-  const { cartRepo, cartService } = getCartDependencies();
-  await cartRepo.addItem(session.userId, externalId, quantity);
+  const validation = updateCartSchema.safeParse({ externalId, quantity });
+  if (!validation.success) {
+    throw new Error(
+      validation.error.issues[0]?.message ?? "Parâmetros do carrinho inválidos",
+    );
+  }
 
+  const { cartRepo, catalogRepo, cartService } = getCartDependencies();
+
+  // Se estiver adicionando, valida se o produto realmente existe no catálogo
+  if (quantity > 0) {
+    const product = await catalogRepo.findByExternalId(externalId);
+    if (!product) {
+      throw new Error(`Produto ${externalId} não encontrado no catálogo.`);
+    }
+  }
+
+  await cartRepo.addItem(session.userId, externalId, quantity);
   return cartService.getCart(session.userId);
 }
 
@@ -57,6 +85,13 @@ export async function removeCartItemAction(
   const session = await getCurrentSession();
   if (!session) {
     throw new Error("Usuário não autenticado");
+  }
+
+  const validation = removeCartSchema.safeParse({ externalId });
+  if (!validation.success) {
+    throw new Error(
+      validation.error.issues[0]?.message ?? "ID do produto inválido",
+    );
   }
 
   const { cartRepo, cartService } = getCartDependencies();

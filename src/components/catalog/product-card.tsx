@@ -22,7 +22,10 @@ export function ProductCard({ product }: { product: Product }) {
   }).format(product.price);
 
   return (
-    <Card className="flex h-full flex-col justify-between overflow-hidden transition-all hover:shadow-md">
+    <Card
+      id={`product-${product.externalId}`}
+      className="flex h-full flex-col justify-between overflow-hidden transition-all hover:shadow-md"
+    >
       {/* Imagem do Produto com fundo neutro */}
       <div className="relative flex h-52 w-full items-center justify-center bg-white p-6">
         <div className="relative h-40 w-full">
