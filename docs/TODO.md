@@ -243,13 +243,13 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 
 ## Épico E — Qualidade e verificação
 
-### [ ] E1. Testes unitários dos serviços — *incremental, acompanha C1–C5*
+### [X] E1. Testes unitários dos serviços — *incremental, acompanha C1–C5*
 
 - **Arquivos:** `tests/services/*.test.ts`.
 - Cobertura mínima: composição de catálogo, hidratação, checkout, sessão e histórico. Usar `node:test` + `node:assert/strict` e fakes injetados, sem bancos reais.
 - **Critérios:** `npm test` verde com `POSTGRES_URL`/`MONGODB_URI`/`REDIS_URL` placeholders.
 
-### [ ] E2. Teste de concorrência do checkout — *depende de C3, B3*
+### [X] E2. Teste de concorrência do checkout — *depende de C3, B3*
 
 - **Arquivos:** `tests/persistence/checkout-concurrency.test.ts` (ou `tests/services/`), documentação do cenário em `docs/TESTING.md`.
 - Simular N compras simultâneas do mesmo SKU com estoque limitado e provar que a soma debitada nunca excede o saldo (padrão `FOR UPDATE`). Rodar localmente no WSL2 com os bancos reais; manter o teste **opcional** no CI (variável `RUN_LIVE_TESTS=1`).
