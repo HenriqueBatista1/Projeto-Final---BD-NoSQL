@@ -209,34 +209,34 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 - Tokens Tailwind, botões, inputs, cards, badges de estoque, drawer base, navbar com link para "Meus Pedidos" e logout. Sem lógica de negócio.
 - **Critérios:** components renderizam isoladamente; layout não importa clients de banco.
 
-### [ ] D2. Tela de login / seleção rápida de usuário — *depende de C4, C6, D1*
+### [X] D2. Tela de login — *concluído*
 
-- **Arquivos:** `app/(store)/login/page.tsx`, `src/components/auth/**`.
-- Formulário email+senha **e** lista de usuários do seed para entrada rápida. Redirecionar para `/` após sessão criada.
-- **Critérios:** fluxo funcional sem expor `password_hash`; usuário sem sessão é redirecionado para `/login`.
+- **Arquivos:** `app/login/page.tsx`, `app/login/login-form.tsx`.
+- Formulário email+senha com validação defensiva e mensagens de erro em português. Usuário já autenticado é redirecionado para `/`; usuário sem sessão é redirecionado para `/login`.
+- **Critérios:** fluxo funcional sem expor `password_hash`; proteção de rotas com cookie de sessão HttpOnly.
 
-### [ ] D3. Catálogo, filtros e autocomplete — *depende de C1, C6, D1*
+### [X] D3. Catálogo, filtros e autocomplete — *concluído*
 
-- **Arquivos:** `app/(store)/page.tsx`, `src/components/catalog/**`.
-- Vitrine com `stock`, filtro por categoria via `distinct`, busca com debounce ~300ms e até 5 sugestões; badge "sem estoque".
+- **Arquivos:** `app/(store)/page.tsx`, `src/components/catalog/product-card.tsx`, `src/components/catalog/category-filter.tsx`, `src/components/catalog/search-bar.tsx`.
+- Vitrine com `stock`, filtro por categoria via `distinct`, busca com debounce ~300ms e até 5 sugestões; badge "sem estoque"; clique na sugestão rola suavemente até o produto.
 - **Critérios:** nenhuma sugestão para menos de 2 caracteres; nenhuma query N+1; preço vem do servidor.
 
-### [ ] D4. Drawer do carrinho — *depende de C2, C6, D1*
+### [X] D4. Drawer do carrinho — *concluído*
 
-- **Arquivos:** `src/components/cart/**`.
-- Abrir/fechar, incrementar/decrementar com optimistic update, alerta visual quando `cartQuantity > stock`, botão para checkout.
-- **Critérios:** estados vazio/carregando/erro implementados; ações passam pelas Server Actions.
+- **Arquivos:** `src/components/cart/cart-context.tsx`, `src/components/cart/cart-drawer.tsx`, `app/actions/cart.ts`.
+- Abrir/fechar, incrementar/decrementar no Redis via `HINCRBY`/`HDEL`, alerta visual quando `cartQuantity > stock`, botão para checkout e contador de itens na Navbar.
+- **Critérios:** estados vazio/carregando/erro implementados; ações passam pelas Server Actions com validação Zod.
 
-### [ ] D5. Checkout — *depende de C3, C6, D4*
+### [X] D5. Checkout — *concluído*
 
-- **Arquivos:** `app/(store)/checkout/page.tsx`, `src/components/checkout/**`.
-- Resumo com preços do servidor, endereço de entrega, forma de pagamento, botão "Finalizar pedido", mensagem clara de estoque insuficiente e redirect para "Meus Pedidos".
+- **Arquivos:** `app/(store)/checkout/page.tsx`, `app/actions/checkout.ts`.
+- Resumo com preços do servidor, endereço de entrega, forma de pagamento (PIX ou Cartão), botão "Confirmar e Pagar", transação ACID com lock pessimista no PostgreSQL, limpeza do carrinho no Redis após o commit e tela de confirmação com ID do pedido.
 - **Critérios:** nenhum campo de preço editável no cliente; falha de estoque mantém o carrinho.
 
-### [ ] D6. Meus Pedidos — *depende de C5, C6, D1*
+### [X] D6. Meus Pedidos — *concluído*
 
-- **Arquivos:** `app/(store)/orders/page.tsx`, `src/components/orders/**`.
-- Lista de pedidos com itens (snapshot histórico), totais e data. Sem consulta ao Mongo.
+- **Arquivos:** `app/(store)/orders/page.tsx`, `src/lib/services/order-history.ts`.
+- Lista de pedidos com itens (snapshot histórico), totais, status e data. Imagens enriquecidas via consulta em lote ao MongoDB sem N+1 pelo `OrderHistoryService`.
 - **Critérios:** pedido antigo continua correto mesmo se o catálogo mudar; estado vazio tratado.
 
 ---
