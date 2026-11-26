@@ -183,7 +183,7 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 ### [X] C4. `AuthService` — autenticação demo e sessão — *concluído; depende de B2, B4*
 
 - **Arquivos:** `src/lib/services/auth.ts`, `tests/services/auth.test.ts`, com usuários fornecidos por B4.
-- Login demo por `email` + `scryptSync` com o salt do seed; seleção rápida por ID apenas de usuário ativo; emissão, leitura e invalidação da sessão Redis. Sem cadastro.
+- Cadastro com `scrypt` e salt aleatório por conta. Login por e-mail e senha com suporte ao hash do seed, seleção rápida por ID de usuário ativo e gerenciamento de sessões no Redis.
 - O serviço não escreve cookies. C6 gerenciará `polyglot_session` com `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age=7200` e `Secure` em produção.
 - **Critérios:** testes cobrem senha errada, usuário inativo, seleção rápida, token inexistente/expirado, logout e não exposição do hash.
 
@@ -296,11 +296,11 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 - [X] **Endereço de entrega:** campo livre obrigatório, validado pela action antes de C3.
 - [X] **Forma de pagamento:** opções fixas `PIX` e `CARTAO_CREDITO`.
 - [X] **Seed de Mongo:** manter `upsert` por `external_id`, sem remover automaticamente produtos ausentes da API externa.
-- [X] **Auth:** login exclusivamente demonstrativo com salt fixo, seleção rápida de usuários ativos e nenhum cadastro na UI.
+- [X] **Auth:** cadastro em `/cadastro`, login por e-mail e senha e seleção rápida de usuários ativos para a demonstração.
 
 ## Fora de escopo
 
-- ORM/ODM, fila de pagamento real, webhook, recuperação de senha, cadastro de usuário, internacionalização e testes de carga em CI.
+- ORM/ODM, fila de pagamento real, webhook, recuperação de senha, internacionalização e testes de carga em CI.
 
 ---
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { Button, Card, Input } from "@/components/ui";
 import { loginAction, type LoginActionResult } from "../actions/auth";
@@ -8,7 +9,7 @@ const initialState: LoginActionResult = {
   success: false,
 };
 
-export function LoginForm() {
+export function LoginForm({ registrationComplete }: { registrationComplete: boolean }) {
   const [state, formAction, isPending] = useActionState(
     loginAction,
     initialState,
@@ -25,6 +26,15 @@ export function LoginForm() {
             Entre com suas credenciais para gerenciar seus pedidos e compras.
           </p>
         </div>
+
+        {registrationComplete && (
+          <p
+            role="status"
+            className="mb-5 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800"
+          >
+            Conta criada com sucesso. Entre com seu e-mail e senha.
+          </p>
+        )}
 
         {/* Mensagem de erro retornada pelo backend */}
         {state?.error && (
@@ -72,6 +82,13 @@ export function LoginForm() {
             {isPending ? "Entrando..." : "Entrar"}
           </Button>
         </form>
+
+        <p className="mt-6 text-center text-sm text-slate-600">
+          Ainda não tem uma conta?{" "}
+          <Link href="/cadastro" className="font-semibold text-brand-700 hover:underline">
+            Criar conta
+          </Link>
+        </p>
       </Card>
     </div>
   );

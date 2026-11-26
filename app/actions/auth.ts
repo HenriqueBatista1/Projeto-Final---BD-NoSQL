@@ -2,9 +2,12 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { AuthenticationError } from "@/lib/services/auth";
+import {
+  AuthenticationError,
+  EmailAlreadyRegisteredError,
+} from "@/lib/services/auth";
 import { toActionFailure } from "@/lib/action-errors";
-import { loginSchema } from "@/lib/action-schemas";
+import { loginSchema, registerSchema } from "@/lib/action-schemas";
 import type { ActionFailure } from "@/lib/action-result";
 import { getAuthService } from "@/lib/services/factories";
 import { getSessionCookieOptions } from "@/lib/session-cookie";
@@ -15,6 +18,39 @@ export type LoginActionResult = {
   success: boolean;
   error?: string;
 };
+
+export async function registerAction(
+  _prevState: ActionFailure | null,
+  formData: FormData,
+): Promise<ActionFailure> {
+  const validation = registerSchema.safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+    password: formData.get("password"),
+  });
+
+  if (!validation.success) {
+    return {
+      success: false,
+      error: validation.error.issues[0]?.message ?? "Dados inválidos.",
+    };
+  }
+
+  try {
+    await getAuthService().register(validation.data);
+  } catch (error) {
+    if (error instanceof EmailAlreadyRegisteredError) {
+      return { success: false, error: "Já existe uma conta com este e-mail." };
+    }
+    return toActionFailure(
+      error,
+      "Erro inesperado no cadastro:",
+      "Não foi possível criar sua conta. Tente novamente mais tarde.",
+    );
+  }
+
+  redirect("/login?cadastro=sucesso");
+}
 
 /**
  * Server Action para realizar login por e-mail e senha.
