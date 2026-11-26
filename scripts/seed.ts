@@ -140,6 +140,8 @@ export async function seed(): Promise<void> {
     await mongoClient.connect();
     const productsCollection = mongoClient.db("polyglot_store").collection("products");
 
+    await productsCollection.createIndex({ external_id: 1 }, { unique: true });
+
     await productsCollection.bulkWrite(
       (products as FakeStoreProduct[]).map((product) => ({
         updateOne: {
@@ -160,7 +162,6 @@ export async function seed(): Promise<void> {
       })),
     );
 
-    await productsCollection.createIndex({ external_id: 1 }, { unique: true });
     await productsCollection.createIndex({ category: 1 });
     await productsCollection.createIndex(
       { title: "text", description: "text", category: "text" },

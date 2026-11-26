@@ -295,7 +295,7 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 
 - [X] **Endereço de entrega:** campo livre obrigatório, validado pela action antes de C3.
 - [X] **Forma de pagamento:** opções fixas `PIX` e `CARTAO_CREDITO`.
-- [ ] **Seed de Mongo:** manter `upsert` (não remove produtos que saíram da API) ou passar a sincronizar remoções? Importante para a idempotência esperada.
+- [X] **Seed de Mongo:** manter `upsert` por `external_id`, sem remover automaticamente produtos ausentes da API externa.
 - [X] **Auth:** login exclusivamente demonstrativo com salt fixo, seleção rápida de usuários ativos e nenhum cadastro na UI.
 
 ## Fora de escopo
