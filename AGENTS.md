@@ -9,7 +9,7 @@
   - `orders-inventory.ts`: PostgreSQL stock, orders, item snapshots, and audit trail.
   - `users.ts`: PostgreSQL user lookup for demo authentication.
 - Services in `src/lib/services/` compose repositories: C1 catalog + stock, C2 cart hydration, C3 checkout, C4 authentication/session, and C5 order history. Keep business rules here, not in UI components or C6.
-- C6 Server Actions and Route Handlers are thin server adapters: validate input (Zod), read/write the session cookie, call services, and return user-facing errors in Portuguese. Do not import database clients in actions or routes.
+- C6 Server Actions and Route Handlers are thin server adapters: validate input (Zod), read/write the session cookie, and call services. All user-facing error messages must be in Portuguese. Do not import database clients in actions or routes.
 - App Router pages and components render the store UI and call server actions for mutations. Keep database access and authoritative prices on the server.
 - `init.sql` defines the PostgreSQL schema and inventory audit trigger. `scripts/seed.ts` imports FakeStoreAPI data; preserve idempotency and existing inventory quantities when re-running it.
 
