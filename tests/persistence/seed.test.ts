@@ -26,6 +26,76 @@ test("seed helpers use deterministic inventory and demo password", async () => {
   );
 });
 
+test("seed creates the unique external ID index before product upserts", async (t) => {
+  const seed = await import("../../scripts/seed");
+  const { mongoClient } = await import("../../src/lib/db/mongodb");
+  const { pool } = await import("../../src/lib/db/postgres");
+  const calls: string[] = [];
+  const product = {
+    id: 7,
+    title: "Backpack",
+    price: 25,
+    description: "A durable backpack",
+    category: "bags",
+    image: "https://example.test/backpack.png",
+    rating: { rate: 4, count: 12 },
+  };
+  const user = {
+    name: { firstname: "Test", lastname: "User" },
+    email: "test@example.test",
+    address: {
+      street: "Example Street",
+      number: 1,
+      city: "Example City",
+      zipcode: "00000",
+    },
+  };
+  const collection = {
+    async bulkWrite(operations: unknown[]) {
+      calls.push("bulkWrite");
+      assert.deepEqual(operations, [{
+        updateOne: {
+          filter: { external_id: 7 },
+          update: { $set: {
+            external_id: 7,
+            title: "Backpack",
+            price: 25,
+            description: "A durable backpack",
+            category: "bags",
+            image: "https://example.test/backpack.png",
+            rating: { rate: 4, count: 12 },
+          } },
+          upsert: true,
+        },
+      }]);
+    },
+    async createIndex(indexSpec: Record<string, unknown>, options?: { unique?: boolean }) {
+      if (options?.unique && "external_id" in indexSpec) {
+        calls.push("uniqueIndex");
+      }
+      return "index";
+    },
+  };
+
+  t.mock.method(globalThis, "fetch", async (url: RequestInfo | URL) =>
+    new Response(
+      JSON.stringify(String(url).endsWith("/products") ? [product] : [user]),
+      { status: 200 },
+    ),
+  );
+  t.mock.method(mongoClient, "connect", async () => mongoClient);
+  t.mock.method(mongoClient, "db", () => ({
+    collection: () => collection,
+  }) as unknown as ReturnType<typeof mongoClient.db>);
+  t.mock.method(mongoClient, "close", async () => {});
+  t.mock.method(pool, "query", async () => ({ rows: [], rowCount: 0 }));
+  t.mock.method(pool, "end", async () => {});
+
+  await seed.seed();
+
+  assert.deepEqual(calls, ["uniqueIndex", "bulkWrite"]);
+});
+
 test("seed rejects non-array API responses before database writes", async () => {
   const seed = await import("../../scripts/seed");
 
