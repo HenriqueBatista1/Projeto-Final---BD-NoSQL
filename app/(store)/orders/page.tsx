@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentSession } from "../../actions/auth";
+import { getCurrentSession } from "@/lib/session";
 import { OrderHistoryService } from "@/lib/services/order-history";
 import { OrderAndInventoryRepository } from "@/lib/repositories/orders-inventory";
 import { CatalogRepository } from "@/lib/repositories/catalog";

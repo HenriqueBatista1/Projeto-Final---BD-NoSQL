@@ -41,9 +41,15 @@ export function SearchBar() {
     setLoading(true);
     const timeoutId = setTimeout(async () => {
       try {
-        const results = await suggestProductsAction(trimmed);
-        setSuggestions(results);
-        setIsOpen(results.length > 0);
+        const result = await suggestProductsAction(trimmed);
+        if (!result.success) {
+          setSuggestions([]);
+          setIsOpen(false);
+          console.error("Erro ao buscar sugestões:", result.error);
+          return;
+        }
+        setSuggestions(result.data);
+        setIsOpen(result.data.length > 0);
       } catch (error) {
         console.error("Erro ao buscar sugestões:", error);
       } finally {

@@ -2,32 +2,19 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { z } from "zod";
-import { AuthService, AuthenticationError } from "@/lib/services/auth";
-import { UserRepository } from "@/lib/repositories/users";
-import { CartAndSessionRepository } from "@/lib/repositories/cart-session";
-import type { Session } from "@/lib/types";
+import { AuthenticationError } from "@/lib/services/auth";
+import { toActionFailure } from "@/lib/action-errors";
+import { loginSchema } from "@/lib/action-schemas";
+import type { ActionFailure } from "@/lib/action-result";
+import { getAuthService } from "@/lib/services/factories";
+import { getSessionCookieOptions } from "@/lib/session-cookie";
 
 const SESSION_COOKIE_NAME = "polyglot_session";
-const SESSION_MAX_AGE_SECONDS = 7200; // 2 horas (mesmo TTL do Redis)
-
-// Validação dos dados do formulário com Zod
-const loginSchema = z.object({
-  email: z.string().email("Por favor, insira um e-mail válido."),
-  password: z.string().min(1, "A senha é obrigatória."),
-});
 
 export type LoginActionResult = {
   success: boolean;
   error?: string;
 };
-
-function getAuthService(): AuthService {
-  return new AuthService(
-    new UserRepository(),
-    new CartAndSessionRepository(),
-  );
-}
 
 /**
  * Server Action para realizar login por e-mail e senha.
@@ -62,22 +49,20 @@ export async function loginAction(
 
     // 3. Grava o cookie HttpOnly seguro no navegador
     const cookieStore = await cookies();
-    cookieStore.set(SESSION_COOKIE_NAME, sessionToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: SESSION_MAX_AGE_SECONDS,
-      secure: process.env.NODE_ENV === "production",
-    });
+    cookieStore.set(
+      SESSION_COOKIE_NAME,
+      sessionToken,
+      getSessionCookieOptions(process.env.NODE_ENV === "production"),
+    );
   } catch (error) {
     if (error instanceof AuthenticationError) {
       return { success: false, error: "E-mail ou senha incorretos." };
     }
-    console.error("Erro inesperado no login:", error);
-    return {
-      success: false,
-      error: "Ocorreu um erro ao tentar entrar. Tente novamente mais tarde.",
-    };
+    return toActionFailure(
+      error,
+      "Erro inesperado no login:",
+      "Ocorreu um erro ao tentar entrar. Tente novamente mais tarde.",
+    );
   }
 
   // 4. Redireciona o usuário para a página inicial (vitrine)
@@ -87,29 +72,22 @@ export async function loginAction(
 /**
  * Server Action para deslogar (logout).
  */
-export async function logoutAction(): Promise<void> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+export async function logoutAction(): Promise<ActionFailure | void> {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
-  if (token) {
-    const authService = getAuthService();
-    await authService.logout(token);
-    cookieStore.delete(SESSION_COOKIE_NAME);
+    if (token) {
+      await getAuthService().logout(token);
+      cookieStore.delete(SESSION_COOKIE_NAME);
+    }
+  } catch (error) {
+    return toActionFailure(
+      error,
+      "Erro inesperado no logout:",
+      "Não foi possível encerrar sua sessão. Tente novamente.",
+    );
   }
 
   redirect("/login");
-}
-
-//Retorna a sessão do usuário logado atualmente (ou null se não estiver logado).
-
-export async function getCurrentSession(): Promise<Session | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!token) {
-    return null;
-  }
-
-  const authService = getAuthService();
-  return authService.getSession(token);
 }

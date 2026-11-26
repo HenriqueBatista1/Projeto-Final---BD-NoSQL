@@ -39,8 +39,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const refreshCart = useCallback(async () => {
     try {
       setLoading(true);
-      const cartItems = await getCartAction();
-      setItems(cartItems);
+      const result = await getCartAction();
+      if (!result.success) {
+        console.error("Erro ao carregar o carrinho:", result.error);
+        return;
+      }
+      setItems(result.data);
     } catch (error) {
       console.error("Erro ao carregar o carrinho do Redis:", error);
     } finally {
@@ -59,8 +63,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addItem = async (externalId: number, quantity = 1) => {
     try {
       setLoading(true);
-      const updated = await updateCartItemAction(externalId, quantity);
-      setItems(updated);
+      const result = await updateCartItemAction(externalId, quantity);
+      if (!result.success) {
+        console.error("Erro ao atualizar item no carrinho:", result.error);
+        return;
+      }
+      setItems(result.data);
       setIsOpen(true); // Abre a gaveta para o usuário ver o item adicionado
     } catch (error) {
       console.error("Erro ao atualizar item no carrinho:", error);
@@ -73,8 +81,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const removeItem = async (externalId: number) => {
     try {
       setLoading(true);
-      const updated = await removeCartItemAction(externalId);
-      setItems(updated);
+      const result = await removeCartItemAction(externalId);
+      if (!result.success) {
+        console.error("Erro ao remover item do carrinho:", result.error);
+        return;
+      }
+      setItems(result.data);
     } catch (error) {
       console.error("Erro ao remover item do carrinho:", error);
     } finally {

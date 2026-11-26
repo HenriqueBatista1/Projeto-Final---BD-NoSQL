@@ -8,7 +8,10 @@ export function StoreNavbar({ userName }: { userName?: string }) {
   const { totalItems, openCart } = useCart();
 
   async function handleLogout() {
-    await logoutAction();
+    const result = await logoutAction();
+    if (result && !result.success) {
+      console.error("Erro ao encerrar sessão:", result.error);
+    }
   }
 
   return (

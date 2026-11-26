@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { getCurrentSession } from "../actions/auth";
+import { getCurrentSession } from "@/lib/session";
 import { StoreNavbar } from "./store-navbar";
 import { CartProvider } from "@/components/cart/cart-context";
 import { CartDrawer } from "@/components/cart/cart-drawer";

@@ -11,8 +11,14 @@ import {
   CartService,
 } from "../../src/lib/services/cart";
 
-type CartReader = Pick<CartAndSessionRepository, "getCart">;
-type CatalogReader = Pick<CatalogRepository, "findByExternalIds">;
+type CartReader = Pick<
+  CartAndSessionRepository,
+  "getCart" | "addItem" | "removeItem"
+>;
+type CatalogReader = Pick<
+  CatalogRepository,
+  "findByExternalId" | "findByExternalIds"
+>;
 type InventoryReader = Pick<OrderAndInventoryRepository, "stocksFor">;
 
 const PRODUCTS: ProductRecord[] = [
@@ -42,8 +48,15 @@ test("empty carts do not query catalog or inventory", async () => {
       assert.equal(userId, 7);
       return {};
     },
+    async addItem() {
+      return 1;
+    },
+    async removeItem() {},
   };
   const catalogRepository: CatalogReader = {
+    async findByExternalId() {
+      throw new Error("catalog details must not be queried");
+    },
     async findByExternalIds() {
       throw new Error("catalog must not be queried");
     },
@@ -71,8 +84,15 @@ test("cart hydration combines product details and batched stocks", async () => {
     async getCart() {
       return { 3: 2, 9: 4 };
     },
+    async addItem() {
+      return 1;
+    },
+    async removeItem() {},
   };
   const catalogRepository: CatalogReader = {
+    async findByExternalId() {
+      throw new Error("catalog details must not be queried");
+    },
     async findByExternalIds(ids) {
       calls.catalog.push(ids);
       return [...PRODUCTS].reverse();
@@ -116,8 +136,15 @@ test("cart hydration combines product details and batched stocks", async () => {
 
 test("missing inventory is treated as zero stock", async () => {
   const service = new CartService(
-    { async getCart() { return { 3: 1 }; } },
-    { async findByExternalIds() { return [PRODUCTS[0]]; } },
+    {
+      async getCart() { return { 3: 1 }; },
+      async addItem() { return 1; },
+      async removeItem() {},
+    },
+    {
+      async findByExternalId() { return PRODUCTS[0]; },
+      async findByExternalIds() { return [PRODUCTS[0]]; },
+    },
     { async stocksFor() { return new Map(); } },
   );
 
@@ -154,7 +181,10 @@ test("missing catalog products reject hydration without mutating the cart", asyn
   };
   const service = new CartService(
     cartRepository,
-    { async findByExternalIds() { return [PRODUCTS[0]]; } },
+    {
+      async findByExternalId() { return PRODUCTS[0]; },
+      async findByExternalIds() { return [PRODUCTS[0]]; },
+    },
     inventoryRepository,
   );
 
@@ -172,8 +202,15 @@ test("missing catalog products reject hydration without mutating the cart", asyn
 test("inventory failures are propagated unchanged", async () => {
   const failure = new Error("inventory unavailable");
   const service = new CartService(
-    { async getCart() { return { 3: 1 }; } },
-    { async findByExternalIds() { return [PRODUCTS[0]]; } },
+    {
+      async getCart() { return { 3: 1 }; },
+      async addItem() { return 1; },
+      async removeItem() {},
+    },
+    {
+      async findByExternalId() { return PRODUCTS[0]; },
+      async findByExternalIds() { return [PRODUCTS[0]]; },
+    },
     { async stocksFor() { throw failure; } },
   );
 
@@ -181,4 +218,130 @@ test("inventory failures are propagated unchanged", async () => {
     service.getCart(1),
     (error: unknown) => error === failure,
   );
+});
+
+test("cart service validates product before positive quantity changes", async () => {
+  const addedItems: Array<[number, number, number]> = [];
+  const catalogLookups: number[] = [];
+  const service = new CartService(
+    {
+      async getCart() {
+        return {};
+      },
+      async addItem(userId, externalId, quantity = 1) {
+        addedItems.push([userId, externalId, quantity]);
+        return quantity;
+      },
+      async removeItem() {},
+    },
+    {
+      async findByExternalId(externalId) {
+        catalogLookups.push(externalId);
+        return PRODUCTS.find((product) => product.externalId === externalId) ?? null;
+      },
+      async findByExternalIds() {
+        return [];
+      },
+    },
+    { async stocksFor() { return new Map(); } },
+  );
+
+  await service.updateItemQuantity(7, 3, 2);
+
+  assert.deepEqual(catalogLookups, [3]);
+  assert.deepEqual(addedItems, [[7, 3, 2]]);
+});
+
+test("cart service rejects a missing product before mutation", async () => {
+  const mutations: Array<[number, number, number]> = [];
+  const service = new CartService(
+    {
+      async getCart() {
+        return {};
+      },
+      async addItem(userId, externalId, quantity = 1) {
+        mutations.push([userId, externalId, quantity]);
+        return quantity;
+      },
+      async removeItem() {},
+    },
+    {
+      async findByExternalId() {
+        return null;
+      },
+      async findByExternalIds() {
+        return [];
+      },
+    },
+    { async stocksFor() { return new Map(); } },
+  );
+
+  await assert.rejects(
+    service.updateItemQuantity(7, 404, 1),
+    (error: unknown) => {
+      assert.ok(error instanceof CartProductUnavailableError);
+      assert.deepEqual(error.missingExternalIds, [404]);
+      return true;
+    },
+  );
+  assert.deepEqual(mutations, []);
+});
+
+test("cart service decrements quantity without a catalog lookup", async () => {
+  const addedItems: Array<[number, number, number]> = [];
+  const service = new CartService(
+    {
+      async getCart() {
+        return {};
+      },
+      async addItem(userId, externalId, quantity = 1) {
+        addedItems.push([userId, externalId, quantity]);
+        return quantity;
+      },
+      async removeItem() {},
+    },
+    {
+      async findByExternalId() {
+        throw new Error("catalog must not be queried");
+      },
+      async findByExternalIds() {
+        return [];
+      },
+    },
+    { async stocksFor() { return new Map(); } },
+  );
+
+  await service.updateItemQuantity(7, 3, -1);
+
+  assert.deepEqual(addedItems, [[7, 3, -1]]);
+});
+
+test("cart service removes an item through the repository", async () => {
+  const removedItems: Array<[number, number]> = [];
+  const service = new CartService(
+    {
+      async getCart() {
+        return {};
+      },
+      async addItem() {
+        return 1;
+      },
+      async removeItem(userId, externalId) {
+        removedItems.push([userId, externalId]);
+      },
+    },
+    {
+      async findByExternalId() {
+        return null;
+      },
+      async findByExternalIds() {
+        return [];
+      },
+    },
+    { async stocksFor() { return new Map(); } },
+  );
+
+  await service.removeItem(7, 3);
+
+  assert.deepEqual(removedItems, [[7, 3]]);
 });

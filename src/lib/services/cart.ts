@@ -5,8 +5,14 @@ import type {
 } from "../repositories/contracts";
 import type { HydratedCartItem } from "../types";
 
-type CartReader = Pick<CartAndSessionRepository, "getCart">;
-type CatalogReader = Pick<CatalogRepository, "findByExternalIds">;
+type CartRepository = Pick<
+  CartAndSessionRepository,
+  "getCart" | "addItem" | "removeItem"
+>;
+type CatalogReader = Pick<
+  CatalogRepository,
+  "findByExternalId" | "findByExternalIds"
+>;
 type InventoryReader = Pick<OrderAndInventoryRepository, "stocksFor">;
 
 export class CartProductUnavailableError extends Error {
@@ -23,10 +29,29 @@ export class CartProductUnavailableError extends Error {
 
 export class CartService {
   constructor(
-    private readonly cartRepository: CartReader,
+    private readonly cartRepository: CartRepository,
     private readonly catalogRepository: CatalogReader,
     private readonly inventoryRepository: InventoryReader,
   ) {}
+
+  async updateItemQuantity(
+    userId: number,
+    externalId: number,
+    quantity: number,
+  ): Promise<void> {
+    if (quantity > 0) {
+      const product = await this.catalogRepository.findByExternalId(externalId);
+      if (!product) {
+        throw new CartProductUnavailableError([externalId]);
+      }
+    }
+
+    await this.cartRepository.addItem(userId, externalId, quantity);
+  }
+
+  async removeItem(userId: number, externalId: number): Promise<void> {
+    await this.cartRepository.removeItem(userId, externalId);
+  }
 
   async getCart(userId: number): Promise<HydratedCartItem[]> {
     const cart = await this.cartRepository.getCart(userId);
