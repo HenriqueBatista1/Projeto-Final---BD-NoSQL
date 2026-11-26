@@ -249,7 +249,7 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 - Cobertura mínima: composição de catálogo, hidratação, checkout, sessão e histórico. Usar `node:test` + `node:assert/strict` e fakes injetados, sem bancos reais.
 - **Critérios:** `npm test` verde com `POSTGRES_URL`/`MONGODB_URI`/`REDIS_URL` placeholders.
 
-### [ ] E2. Teste de concorrência do checkout — *depende de C3, B3*
+### [X] E2. Teste de concorrência do checkout — *depende de C3, B3*
 
 - **Arquivos:** `tests/persistence/checkout-concurrency.test.ts` (ou `tests/services/`), documentação do cenário em `docs/TESTING.md`.
 - Simular N compras simultâneas do mesmo SKU com estoque limitado e provar que a soma debitada nunca excede o saldo (padrão `FOR UPDATE`). Rodar localmente no WSL2 com os bancos reais; manter o teste **opcional** no CI (variável `RUN_LIVE_TESTS=1`).
