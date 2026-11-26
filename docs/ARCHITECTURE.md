@@ -57,7 +57,7 @@ REDIS_URL="rediss://default:[PASSWORD]@[ENDPOINT].upstash.io:6379"
 
    * `OrderAndInventoryRepository` $\rightarrow$ **PostgreSQL** (Controle de Estoque, Pedidos, Itens/Snapshot e Auditoria).
 
-   * `UserRepository` $\rightarrow$ **PostgreSQL** (consulta de usuários ativos para autenticação demonstrativa).
+   * `UserRepository` $\rightarrow$ **PostgreSQL** (cadastro e consulta de usuários para autenticação).
 
 4. **Camada 4 — Integração Externa (Seed Script):** Script idempotente executado na inicialização para popular MongoDB e PostgreSQL a partir da FakeStoreAPI, sem acoplamento em tempo real durante a navegação do usuário.
 
@@ -165,7 +165,7 @@ DEL cart:1
 
 * **Transporte:** O `token` opaco (gerado via `crypto.randomUUID()`) é armazenado em um cookie **`HttpOnly`** (`SameSite=Lax`, `Path=/`, `Max-Age=7200` e `Secure` em produção) gerenciado exclusivamente pelas *Server Actions* / *Route Handlers* do Next.js.
 
-* **Fluxo de Autenticação (Demo / Faculdade):** Suporta tanto login tradicional (`email` + verificação de hash de senha) quanto **seleção rápida por ID de um usuário ativo do seed**. O `AuthService` consulta o `UserRepository`, cria a sessão no Redis e devolve o token; a camada C6 é a única responsável por escrever ou remover o cookie. Não há cadastro de usuários e nenhum hash de senha é exposto para a UI.
+* **Fluxo de Autenticação:** A página `/cadastro` cria contas no PostgreSQL com um hash `scrypt` e salt aleatório por conta. Após o cadastro, o usuário é encaminhado ao login. O `AuthService` valida a senha, cria a sessão no Redis e devolve o token à camada C6, que gerencia o cookie. O serviço também reconhece o hash dos usuários do seed e oferece seleção rápida por ID de usuário ativo para a demonstração.
 
 * **Tipo Oficial no Redis:** `String` contendo payload JSON leve da sessão autenticada.
 

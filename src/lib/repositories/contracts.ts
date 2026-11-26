@@ -38,6 +38,9 @@ export interface OrderAndInventoryRepository {
 }
 
 export interface UserRepository {
+  create(
+    input: Pick<UserRecord, "name" | "email" | "passwordHash">,
+  ): Promise<PublicUser | null>;
   findByEmail(email: string): Promise<UserRecord | null>;
   findActiveById(id: number): Promise<PublicUser | null>;
   listActive(): Promise<PublicUser[]>;

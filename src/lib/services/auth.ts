@@ -1,4 +1,5 @@
-import { scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import type {
   CartAndSessionRepository,
   UserRepository,
@@ -7,14 +8,11 @@ import type { PublicUser, Session, UserRecord } from "../types";
 
 const DEMO_PASSWORD_SALT = "polyglot-store-demo";
 const DUMMY_PASSWORD_HASH = "00".repeat(64);
+const derivePasswordKey = promisify<string, string, number, Buffer>(scrypt);
 
 type SessionStore = Pick<
   CartAndSessionRepository,
   "createSession" | "deleteSession" | "getSession"
->;
-type UserReader = Pick<
-  UserRepository,
-  "findActiveById" | "findByEmail" | "listActive"
 >;
 
 function sessionFor(user: Pick<UserRecord, "id" | "name" | "email">): Session {
@@ -25,13 +23,17 @@ function sessionFor(user: Pick<UserRecord, "id" | "name" | "email">): Session {
   };
 }
 
-function matchesDemoPassword(password: string, passwordHash: string): boolean {
-  if (!/^[0-9a-f]{128}$/i.test(passwordHash)) {
+async function matchesPassword(password: string, passwordHash: string): Promise<boolean> {
+  const saltedHash = /^scrypt:([0-9a-f]{32}):([0-9a-f]{128})$/.exec(passwordHash);
+  const salt = saltedHash?.[1] ?? DEMO_PASSWORD_SALT;
+  const hash = saltedHash?.[2] ?? passwordHash;
+
+  if (!/^[0-9a-f]{128}$/i.test(hash)) {
     return false;
   }
 
-  const expected = Buffer.from(passwordHash, "hex");
-  const candidate = scryptSync(password, DEMO_PASSWORD_SALT, expected.length);
+  const expected = Buffer.from(hash, "hex");
+  const candidate = await derivePasswordKey(password, salt, expected.length);
   return timingSafeEqual(candidate, expected);
 }
 
@@ -42,23 +44,44 @@ export class AuthenticationError extends Error {
   }
 }
 
+export class EmailAlreadyRegisteredError extends Error {
+  constructor() {
+    super("Email is already registered");
+    this.name = "EmailAlreadyRegisteredError";
+  }
+}
+
 export class AuthService {
   constructor(
-    private readonly users: UserReader,
+    private readonly users: UserRepository,
     private readonly sessions: SessionStore,
   ) {}
 
+  async register({ name, email, password }: {
+    name: string;
+    email: string;
+    password: string;
+  }): Promise<void> {
+    const salt = randomBytes(16).toString("hex");
+    const key = await derivePasswordKey(password, salt, 64);
+    const user = await this.users.create({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      passwordHash: `scrypt:${salt}:${key.toString("hex")}`,
+    });
+
+    if (!user) {
+      throw new EmailAlreadyRegisteredError();
+    }
+  }
+
   async login(email: string, password: string): Promise<string> {
     const user = await this.users.findByEmail(email.trim());
-    const passwordMatches = matchesDemoPassword(
+    const passwordMatches = await matchesPassword(
       password,
       user?.passwordHash ?? DUMMY_PASSWORD_HASH,
     );
-    if (
-      !user ||
-      !passwordMatches ||
-      !user.isActive
-    ) {
+    if (!user || !passwordMatches || !user.isActive) {
       throw new AuthenticationError("Invalid email or password");
     }
 

@@ -5,18 +5,17 @@ import type {
   CartAndSessionRepository,
   UserRepository,
 } from "../../src/lib/repositories/contracts";
-import { AuthenticationError, AuthService } from "../../src/lib/services/auth";
+import {
+  AuthenticationError,
+  AuthService,
+  EmailAlreadyRegisteredError,
+} from "../../src/lib/services/auth";
 import type { PublicUser, Session, UserRecord } from "../../src/lib/types";
 
 type SessionStore = Pick<
   CartAndSessionRepository,
   "createSession" | "deleteSession" | "getSession"
 >;
-type UserReader = Pick<
-  UserRepository,
-  "findActiveById" | "findByEmail" | "listActive"
->;
-
 const PASSWORD_HASH = scryptSync(
   "123456",
   "polyglot-store-demo",
@@ -45,10 +44,25 @@ function authFakes(options: {
     readTokens: [] as string[],
   };
   const user = options.user === undefined ? USER : options.user;
-  const users: UserReader = {
+  const registeredUsers = new Map<string, UserRecord>();
+  const users: UserRepository = {
+    async create(input) {
+      if (user?.email === input.email || registeredUsers.has(input.email)) {
+        return null;
+      }
+
+      const id = 100 + registeredUsers.size;
+      registeredUsers.set(input.email, {
+        ...input,
+        id,
+        address: null,
+        isActive: true,
+      });
+      return { id, name: input.name, email: input.email };
+    },
     async findByEmail(email) {
       calls.emails.push(email);
-      return user;
+      return registeredUsers.get(email) ?? user;
     },
     async findActiveById(id) {
       calls.ids.push(id);
@@ -75,8 +89,44 @@ function authFakes(options: {
     },
   };
 
-  return { calls, users, sessions };
+  return { calls, users, sessions, registeredUsers };
 }
+
+test("registration stores normalized users with unique salts and supports password login", async () => {
+  const fake = authFakes({ user: null });
+  const service = new AuthService(fake.users, fake.sessions);
+  const password = "uma-senha";
+
+  await service.register({ name: " Ana ", email: " ANA@example.test ", password });
+  await service.register({ name: "Bia", email: "bia@example.test", password });
+
+  const ana = fake.registeredUsers.get("ana@example.test");
+  const bia = fake.registeredUsers.get("bia@example.test");
+  assert.ok(ana && bia);
+  assert.equal(ana.name, "Ana");
+  assert.match(ana.passwordHash, /^scrypt:[0-9a-f]{32}:[0-9a-f]{128}$/);
+  assert.notEqual(ana.passwordHash.split(":")[1], bia.passwordHash.split(":")[1]);
+  assert.deepEqual(fake.calls.createdSessions, []);
+
+  await assert.rejects(service.login(ana.email, "outra-senha"), AuthenticationError);
+  assert.equal(await service.login(ana.email, password), "demo-token");
+  assert.deepEqual(fake.calls.createdSessions, [{
+    userId: ana.id,
+    name: "Ana",
+    email: "ana@example.test",
+  }]);
+});
+
+test("registration rejects duplicate emails after normalization", async () => {
+  const fake = authFakes();
+  const service = new AuthService(fake.users, fake.sessions);
+
+  await assert.rejects(
+    service.register({ name: "Outro nome", email: "ANA@EXAMPLE.TEST", password: "nova-senha" }),
+    EmailAlreadyRegisteredError,
+  );
+  assert.equal(fake.registeredUsers.size, 0);
+});
 
 test("password login creates a hash-free session for active users", async () => {
   const fake = authFakes();

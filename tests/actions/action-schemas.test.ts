@@ -47,3 +47,24 @@ test("login and checkout schemas reject invalid form values", () => {
     false,
   );
 });
+
+test("registration validates the form and trims the name and email only", () => {
+  assert.ok(actionSchemas, "action schemas should be available");
+  const { registerSchema } = actionSchemas;
+  const input = { name: " Ana ", email: " ANA@example.test ", password: " senha123 " };
+
+  assert.deepEqual(registerSchema.parse(input), {
+    name: "Ana",
+    email: "ANA@example.test",
+    password: " senha123 ",
+  });
+  for (const changes of [
+    { name: " " },
+    { name: "a".repeat(151) },
+    { email: "e-mail inválido" },
+    { password: "1234567" },
+    { password: "p".repeat(129) },
+  ]) {
+    assert.equal(registerSchema.safeParse({ ...input, ...changes }).success, false);
+  }
+});
