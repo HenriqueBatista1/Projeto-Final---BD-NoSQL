@@ -193,7 +193,7 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 - Degana `Order[]` para a UI (formatação de moeda/data opcional aqui, nunca no banco). Sem dependência do Mongo.
 - **Critérios:** teste com rows duplicadas por item devolve um pedido com N itens.
 
-### [ ] C6. Server Actions / Route Handlers (camada fina) — *depende de C1–C5*
+### [X] C6. Server Actions / Route Handlers (camada fina) — *depende de C1–C5*
 
 - **Arquivos:** `src/app/actions/*.ts`, `src/app/api/session/route.ts` (se necessário).
 - apenas validação com `zod`, leitura do cookie e delegação aos serviços. Retornar erros em português. Nenhuma regra de negócio aqui.
