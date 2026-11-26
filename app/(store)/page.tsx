@@ -42,9 +42,6 @@ export default async function StorePage({ searchParams }: StorePageProps) {
               "Nosso Catálogo"
             )}
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Produtos com dados do MongoDB e inventário transacional do PostgreSQL.
-          </p>
         </div>
         {/* Aqui está a barra de busca! */}
         <SearchBar />
