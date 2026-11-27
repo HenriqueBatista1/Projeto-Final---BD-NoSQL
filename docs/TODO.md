@@ -255,7 +255,7 @@ Repositórios devem **aceitar o cliente por injeção** (padrão com fallback pa
 - Simular N compras simultâneas do mesmo SKU com estoque limitado e provar que a soma debitada nunca excede o saldo (padrão `FOR UPDATE`). Rodar localmente no WSL2 com os bancos reais; manter o teste **opcional** no CI (variável `RUN_LIVE_TESTS=1`).
 - **Critérios:** zero oversell, nenhum deadlock, logs de auditoria coerentes com as movimentações.
 
-### [ ] E3. Testes de integração com serviços reais (opt-in) — *depende de E1*
+### [X] E3. Testes de integração com serviços reais (opt-in) — *depende de E1*
 
 - **Arquivos:** `tests/integration/**`, `docs/TESTING.md`.
 - Validar seed idempotente (rodar 2x), índices do Mongo, trigger de auditoria e fluxo completo de pedido. Tudo guardado por env flag para não quebrar o default suite.

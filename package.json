@@ -6,6 +6,7 @@
     "start": "next start",
     "seed": "tsx scripts/seed.ts",
     "test": "tsx --test tests/**/*.test.ts",
+    "test:live": "RUN_LIVE_TESTS=1 tsx --test tests/integration/*.test.ts",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit"
   },
